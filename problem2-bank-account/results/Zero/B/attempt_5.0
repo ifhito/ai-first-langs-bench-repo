@@ -1,0 +1,227 @@
+// Bank account: deposit, withdraw, balance.
+// Amounts must be positive integers (<= 0 rejected as error).
+// Withdrawal exceeding balance is rejected (balance unchanged).
+// Balance always >= 0. Integers only.
+//
+// Backend note: the Zero direct AArch64 backend MVP (the default `zero run`
+// target) supports only function declarations over primitives -- no shapes,
+// choices, custom error types, Maybe construction, top-level `const`, or
+// passing `World` into helper functions. Errors are therefore signalled with an
+// out-of-band sentinel: a valid balance is always >= 0, so the operations
+// return -1 to mean "request refused". The caller treats any negative result as
+// a rejection (via `applyResult`) and keeps the prior balance, which guarantees
+// the stored balance is never left negative or invalid.
+
+// Deposit a positive amount. Returns the new balance, or -1 (rejected) when the
+// amount is not a positive integer. No new balance is produced on rejection.
+fn deposit(balance: i64, amount: i64) -> i64 {
+    if amount <= 0 {
+        return -1
+    }
+    return balance + amount
+}
+
+// Withdraw a positive amount that does not exceed the balance. Returns the new
+// balance, or -1 (rejected) when the amount is not positive or would overdraw.
+fn withdraw(balance: i64, amount: i64) -> i64 {
+    if amount <= 0 {
+        return -1
+    }
+    if amount > balance {
+        return -1
+    }
+    return balance - amount
+}
+
+// Apply an operation result to the current balance: keep the old balance when
+// the result was a rejection, otherwise adopt the new balance. This is the
+// single place where the never-negative invariant is enforced.
+fn applyResult(current: i64, result: i64) -> i64 {
+    if result < 0 {
+        return current
+    }
+    return result
+}
+
+fn rejected(result: i64) -> Bool {
+    return result < 0
+}
+
+pub fn main(world: World) -> Void raises {
+    var passed: i32 = 0
+
+    // Case 1: fresh account => 0
+    let b1: i64 = 0
+    let ok1: Bool = b1 == 0
+    if ok1 {
+        passed = passed + 1
+        check world.out.write("PASS case1 fresh balance 0\n")
+    } else {
+        check world.out.write("FAIL case1 fresh balance 0\n")
+    }
+
+    // Case 2: deposit 100 => 100
+    let b2: i64 = applyResult(0, deposit(0, 100))
+    let ok2: Bool = b2 == 100
+    if ok2 {
+        passed = passed + 1
+        check world.out.write("PASS case2 dep100 => 100\n")
+    } else {
+        check world.out.write("FAIL case2 dep100 => 100\n")
+    }
+
+    // Case 3: deposit 100, deposit 50 => 150
+    let b3a: i64 = applyResult(0, deposit(0, 100))
+    let b3: i64 = applyResult(b3a, deposit(b3a, 50))
+    let ok3: Bool = b3 == 150
+    if ok3 {
+        passed = passed + 1
+        check world.out.write("PASS case3 dep100 dep50 => 150\n")
+    } else {
+        check world.out.write("FAIL case3 dep100 dep50 => 150\n")
+    }
+
+    // Case 4: deposit 100, withdraw 30 => 70
+    let b4a: i64 = applyResult(0, deposit(0, 100))
+    let b4: i64 = applyResult(b4a, withdraw(b4a, 30))
+    let ok4: Bool = b4 == 70
+    if ok4 {
+        passed = passed + 1
+        check world.out.write("PASS case4 dep100 wd30 => 70\n")
+    } else {
+        check world.out.write("FAIL case4 dep100 wd30 => 70\n")
+    }
+
+    // Case 5: deposit 100, withdraw 100 => 0
+    let b5a: i64 = applyResult(0, deposit(0, 100))
+    let b5: i64 = applyResult(b5a, withdraw(b5a, 100))
+    let ok5: Bool = b5 == 0
+    if ok5 {
+        passed = passed + 1
+        check world.out.write("PASS case5 dep100 wd100 => 0\n")
+    } else {
+        check world.out.write("FAIL case5 dep100 wd100 => 0\n")
+    }
+
+    // Case 6: deposit 50, deposit 50, withdraw 80 => 20
+    let b6a: i64 = applyResult(0, deposit(0, 50))
+    let b6b: i64 = applyResult(b6a, deposit(b6a, 50))
+    let b6: i64 = applyResult(b6b, withdraw(b6b, 80))
+    let ok6: Bool = b6 == 20
+    if ok6 {
+        passed = passed + 1
+        check world.out.write("PASS case6 dep50 dep50 wd80 => 20\n")
+    } else {
+        check world.out.write("FAIL case6 dep50 dep50 wd80 => 20\n")
+    }
+
+    // Case 7: fresh, withdraw 10 => rejected, balance 0
+    let b7: i64 = 0
+    let res7: i64 = withdraw(b7, 10)
+    let b7next: i64 = applyResult(b7, res7)
+    let ok7: Bool = rejected(res7) && b7next == 0
+    if ok7 {
+        passed = passed + 1
+        check world.out.write("PASS case7 fresh wd10 rejected & balance 0\n")
+    } else {
+        check world.out.write("FAIL case7 fresh wd10 rejected & balance 0\n")
+    }
+
+    // Case 8: deposit 100, withdraw 101 => rejected, balance 100
+    let b8: i64 = applyResult(0, deposit(0, 100))
+    let res8: i64 = withdraw(b8, 101)
+    let b8next: i64 = applyResult(b8, res8)
+    let ok8: Bool = rejected(res8) && b8next == 100
+    if ok8 {
+        passed = passed + 1
+        check world.out.write("PASS case8 dep100 wd101 rejected & balance 100\n")
+    } else {
+        check world.out.write("FAIL case8 dep100 wd101 rejected & balance 100\n")
+    }
+
+    // Case 9: deposit -50 => rejected, balance 0
+    let b9: i64 = 0
+    let res9: i64 = deposit(b9, -50)
+    let b9next: i64 = applyResult(b9, res9)
+    let ok9: Bool = rejected(res9) && b9next == 0
+    if ok9 {
+        passed = passed + 1
+        check world.out.write("PASS case9 dep(-50) rejected & balance 0\n")
+    } else {
+        check world.out.write("FAIL case9 dep(-50) rejected & balance 0\n")
+    }
+
+    // Case 10: withdraw -50 => rejected, balance 0
+    let b10: i64 = 0
+    let res10: i64 = withdraw(b10, -50)
+    let b10next: i64 = applyResult(b10, res10)
+    let ok10: Bool = rejected(res10) && b10next == 0
+    if ok10 {
+        passed = passed + 1
+        check world.out.write("PASS case10 wd(-50) rejected & balance 0\n")
+    } else {
+        check world.out.write("FAIL case10 wd(-50) rejected & balance 0\n")
+    }
+
+    // Case 11: deposit 0 => rejected, balance 0
+    let b11: i64 = 0
+    let res11: i64 = deposit(b11, 0)
+    let b11next: i64 = applyResult(b11, res11)
+    let ok11: Bool = rejected(res11) && b11next == 0
+    if ok11 {
+        passed = passed + 1
+        check world.out.write("PASS case11 dep(0) rejected & balance 0\n")
+    } else {
+        check world.out.write("FAIL case11 dep(0) rejected & balance 0\n")
+    }
+
+    // Case 12: withdraw 0 => rejected, balance 0
+    let b12: i64 = 0
+    let res12: i64 = withdraw(b12, 0)
+    let b12next: i64 = applyResult(b12, res12)
+    let ok12: Bool = rejected(res12) && b12next == 0
+    if ok12 {
+        passed = passed + 1
+        check world.out.write("PASS case12 wd(0) rejected & balance 0\n")
+    } else {
+        check world.out.write("FAIL case12 wd(0) rejected & balance 0\n")
+    }
+
+    // Case 13: invariant - balance never negative across a sequence
+    let b13a: i64 = applyResult(0, deposit(0, 100))
+    let b13b: i64 = applyResult(b13a, withdraw(b13a, 999))
+    let b13c: i64 = applyResult(b13b, withdraw(b13b, 100))
+    let b13: i64 = applyResult(b13c, withdraw(b13c, 1))
+    let ok13: Bool = b13 >= 0 && b13 == 0
+    if ok13 {
+        passed = passed + 1
+        check world.out.write("PASS case13 invariant never negative\n")
+    } else {
+        check world.out.write("FAIL case13 invariant never negative\n")
+    }
+
+    // Case 14: each error case left balance unchanged
+    let base: i64 = applyResult(0, deposit(0, 200))
+    let n1: i64 = applyResult(base, deposit(base, -1))
+    let n2: i64 = applyResult(base, deposit(base, 0))
+    let n3: i64 = applyResult(base, withdraw(base, -1))
+    let n4: i64 = applyResult(base, withdraw(base, 0))
+    let n5: i64 = applyResult(base, withdraw(base, 9999))
+    let unchanged: Bool = n1 == base && n2 == base && n3 == base && n4 == base && n5 == base
+    let ok14: Bool = unchanged && base == 200
+    if ok14 {
+        passed = passed + 1
+        check world.out.write("PASS case14 errors leave balance unchanged\n")
+    } else {
+        check world.out.write("FAIL case14 errors leave balance unchanged\n")
+    }
+
+    // Summary
+    var sumbuf: [12]u8 = [0_u8; 12]
+    let sumtext: Maybe<Span<u8>> = std.fmt.i32(sumbuf, passed)
+    check world.out.write("PASS ")
+    if sumtext.has {
+        check world.out.write(sumtext.value)
+    }
+    check world.out.write("/14\n")
+}

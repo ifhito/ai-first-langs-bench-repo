@@ -1,0 +1,21 @@
+{
+  "language": "MoonBit",
+  "condition": "A",
+  "status": "DONE",
+  "pass_at_1": true,
+  "fix_rounds": 0,
+  "final_pass_count": "14/14",
+  "loc": 28,
+  "tokens": 203,
+  "self_recovered": true,
+  "error_quality": "Two-variant suberror BankError (NonPositiveAmount, InsufficientFunds) raised via the typed `raise` effect; callers must handle it via try/try?, distinct and self-describing.",
+  "notes": "Final code guarantees balance>=0 by HAND-WRITTEN guard checks, not by the type system. Balance is a plain `mut Int` inside `struct Account`. deposit raises NonPositiveAmount when amount<=0 (else adds, which keeps it >=0). withdraw raises NonPositiveAmount when amount<=0 and InsufficientFunds when amount>balance, only subtracting after both checks pass, so the result can never go below 0. Because the mutation is the last statement after every guard, a raised error leaves the balance field untouched (unchanged on error). MoonBit's type system enforces error handling (the `raise BankError` effect must be discharged) but does not itself prove the non-negativity invariant; that is a manual contract.",
+  "attempts": [
+    {"attempt": 1, "pass_count": 14, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "Warning [0027] bankaccount.mbt:10:10 Warning (deprecated_syntax): `derive(Show)` is deprecated. Use `derive(Debug)` or manually implement the `Show` trait instead. -- non-fatal; all 14 tests already passed. Switched to derive(Debug) so `moon check` and `moon test` are fully clean."
+  ],
+  "toolchain_notes": "moon 0.1.20260529 (3e1c753 2026-05-29); moonc v0.9.3+08f337e2c; moonrun 0.1.20260529. Docker: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem2-bank-account/results/MoonBit/A ai-lang-bench bash -lc '<cmd>'. Scaffold: `moon new bankaccount`. This toolchain generates a KDL-style `moon.pkg`/`moon.mod` (not JSON) and a cmd/main layout. Layout: bankaccount/{moon.mod, moon.pkg, bankaccount.mbt (impl), bankaccount_test.mbt (14 blackbox tests via @bankaccount), cmd/main/main.mbt}. Build/test run from inside bankaccount/: `moon check` then `moon test`. CONFIRM: no MoonBit guide or external docs were consulted; syntax recovered from prior knowledge only, and no fixes were even needed (clean compile and 14/14 on first run; only a cosmetic deprecation tweak applied afterward).",
+  "self_recovered_normalized": true
+}

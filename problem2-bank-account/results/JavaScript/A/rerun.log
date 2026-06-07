@@ -1,0 +1,22 @@
+## condition: JavaScript/A
+## command: bash -lc cd '/Users/hotake/Documents/ai-lang-bench-repo/problem2-bank-account/results/JavaScript/A' && node run_tests.js
+## date(host): 2026-06-07T14:01:16Z
+----- stdout+stderr -----
+PASS  1 fresh => 0
+PASS  2 deposit(100) => 100
+PASS  3 deposit(100),deposit(50) => 150
+PASS  4 deposit(100),withdraw(30) => 70
+PASS  5 deposit(100),withdraw(100) => 0
+PASS  6 deposit(50),deposit(50),withdraw(80) => 20
+PASS  7 fresh,withdraw(10) => 0
+PASS  8 deposit(100),withdraw(101) => 100
+PASS  9 deposit(-50) => 0
+PASS  10 withdraw(-50) => 0
+PASS  11 deposit(0) => 0
+PASS  12 withdraw(0) => 0
+PASS  13 balance never negative across run
+PASS  14 all error cases leave balance unchanged
+
+PASS 14/14
+----- exit code -----
+0

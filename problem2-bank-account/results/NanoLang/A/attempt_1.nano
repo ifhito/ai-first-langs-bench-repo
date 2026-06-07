@@ -1,0 +1,228 @@
+// Bank account (problem 2) - NanoLang, Pattern A re-run.
+//
+// Invariant: balance is never negative.
+// Error channel: a payload-carrying union (Result-like).
+//   OpResult.Ok  carries the new balance (int).
+//   OpResult.Err carries an error code (int) so the CALLER can branch
+//   on success vs. rejection in code (not just via a print side-effect).
+//
+// The account balance is modeled as a plain int that the harness threads
+// through deposit / withdraw. Each operation returns an OpResult; on Err
+// the balance the caller keeps is its OLD value (the op produced no new one).
+
+union OpResult {
+    Ok { balance: int }
+    Err { code: int }
+}
+
+// Error codes (out-of-domain w.r.t. a real balance, but we never read them
+// as balances; the variant itself is the signal).
+//   1 = non-positive amount
+//   2 = insufficient funds (withdraw exceeding balance)
+
+fn deposit(bal: int, amt: int) -> OpResult {
+    if (<= amt 0) {
+        return (OpResult.Err { code: 1 })
+    }
+    let nb = (+ bal amt)
+    return (OpResult.Ok { balance: nb })
+}
+
+fn withdraw(bal: int, amt: int) -> OpResult {
+    if (<= amt 0) {
+        return (OpResult.Err { code: 1 })
+    }
+    if (> amt bal) {
+        return (OpResult.Err { code: 2 })
+    }
+    let nb = (- bal amt)
+    return (OpResult.Ok { balance: nb })
+}
+
+// ---- test harness -------------------------------------------------------
+//
+// is_err: returns 1 if the result is an Err (rejection), else 0.
+//   This is the explicit rejection-signal check the rubric requires for #7-12.
+
+fn is_err(r: OpResult) -> int {
+    match r {
+        Ok(o) => { return 0 }
+        Err(e) => { return 1 }
+    }
+}
+
+// unwrap_balance: the new balance from an Ok; for an Err returns the
+// supplied fallback (the caller's UNCHANGED balance). So a rejected op
+// leaves the threaded balance exactly as it was.
+
+fn unwrap_balance(r: OpResult, fallback: int) -> int {
+    match r {
+        Ok(o) => { return o.balance }
+        Err(e) => { return fallback }
+    }
+}
+
+// assert helpers: print PASS/FAIL and return 1 on pass, 0 on fail.
+
+fn check_eq(name: int, got: int, want: int) -> int {
+    if (== got want) {
+        let _p = (print "PASS")
+        let _n = (print name)
+        return 1
+    }
+    let _p = (print "FAIL")
+    let _n = (print name)
+    let _g = (print got)
+    let _w = (print want)
+    return 0
+}
+
+fn main() -> int {
+    let mut passed = 0
+
+    // ---- Normal cases (1-6): operation succeeds, balance correct -------
+
+    // #1 initial state -> 0
+    let b1 = 0
+    let p1 = (check_eq 1 b1 0)
+    set passed (+ passed p1)
+
+    // #2 deposit(100) -> 100
+    let r2 = (deposit 0 100)
+    let b2 = (unwrap_balance r2 0)
+    let p2 = (check_eq 2 b2 100)
+    set passed (+ passed p2)
+
+    // #3 deposit(100), deposit(50) -> 150
+    let r3a = (deposit 0 100)
+    let b3a = (unwrap_balance r3a 0)
+    let r3b = (deposit b3a 50)
+    let b3b = (unwrap_balance r3b b3a)
+    let p3 = (check_eq 3 b3b 150)
+    set passed (+ passed p3)
+
+    // #4 deposit(100), withdraw(30) -> 70
+    let r4a = (deposit 0 100)
+    let b4a = (unwrap_balance r4a 0)
+    let r4b = (withdraw b4a 30)
+    let b4b = (unwrap_balance r4b b4a)
+    let p4 = (check_eq 4 b4b 70)
+    set passed (+ passed p4)
+
+    // #5 deposit(100), withdraw(100) -> 0 (exact full withdrawal)
+    let r5a = (deposit 0 100)
+    let b5a = (unwrap_balance r5a 0)
+    let r5b = (withdraw b5a 100)
+    let b5b = (unwrap_balance r5b b5a)
+    let p5 = (check_eq 5 b5b 0)
+    set passed (+ passed p5)
+
+    // #6 deposit(50), deposit(50), withdraw(80) -> 20
+    let r6a = (deposit 0 50)
+    let b6a = (unwrap_balance r6a 0)
+    let r6b = (deposit b6a 50)
+    let b6b = (unwrap_balance r6b b6a)
+    let r6c = (withdraw b6b 80)
+    let b6c = (unwrap_balance r6c b6b)
+    let p6 = (check_eq 6 b6c 20)
+    set passed (+ passed p6)
+
+    // ---- Error cases (7-12): op REJECTED (is_err == 1) AND balance unchanged.
+    //      Both conditions are asserted (rubric requirement).
+
+    // #7 withdraw(10) from 0 -> Err, balance stays 0
+    let r7 = (withdraw 0 10)
+    let rej7 = (is_err r7)
+    let b7 = (unwrap_balance r7 0)
+    let p7a = (check_eq 7 rej7 1)
+    let p7b = (check_eq 7 b7 0)
+    set passed (+ passed (mul2pass p7a p7b))
+
+    // #8 deposit(100), withdraw(101) -> Err, balance stays 100
+    let r8a = (deposit 0 100)
+    let b8a = (unwrap_balance r8a 0)
+    let r8 = (withdraw b8a 101)
+    let rej8 = (is_err r8)
+    let b8 = (unwrap_balance r8 b8a)
+    let p8a = (check_eq 8 rej8 1)
+    let p8b = (check_eq 8 b8 100)
+    set passed (+ passed (mul2pass p8a p8b))
+
+    // #9 deposit(-50) -> Err, balance stays 0
+    let r9 = (deposit 0 -50)
+    let rej9 = (is_err r9)
+    let b9 = (unwrap_balance r9 0)
+    let p9a = (check_eq 9 rej9 1)
+    let p9b = (check_eq 9 b9 0)
+    set passed (+ passed (mul2pass p9a p9b))
+
+    // #10 withdraw(-50) -> Err, balance stays 0
+    let r10 = (withdraw 0 -50)
+    let rej10 = (is_err r10)
+    let b10 = (unwrap_balance r10 0)
+    let p10a = (check_eq 10 rej10 1)
+    let p10b = (check_eq 10 b10 0)
+    set passed (+ passed (mul2pass p10a p10b))
+
+    // #11 deposit(0) -> Err, balance stays 0
+    let r11 = (deposit 0 0)
+    let rej11 = (is_err r11)
+    let b11 = (unwrap_balance r11 0)
+    let p11a = (check_eq 11 rej11 1)
+    let p11b = (check_eq 11 b11 0)
+    set passed (+ passed (mul2pass p11a p11b))
+
+    // #12 withdraw(0) -> Err, balance stays 0
+    let r12 = (withdraw 0 0)
+    let rej12 = (is_err r12)
+    let b12 = (unwrap_balance r12 0)
+    let p12a = (check_eq 12 rej12 1)
+    let p12b = (check_eq 12 b12 0)
+    set passed (+ passed (mul2pass p12a p12b))
+
+    // ---- Invariant checks (13, 14) ------------------------------------
+    //
+    // #13 balance never negative across all operations above.
+    //     We re-run a representative mixed sequence and assert >= 0 at each step.
+    let mut neg = 0
+    let s0 = 0
+    let rs1 = (deposit s0 100)
+    let sb1 = (unwrap_balance rs1 s0)
+    if (< sb1 0) { set neg 1 }
+    let rs2 = (withdraw sb1 80)
+    let sb2 = (unwrap_balance rs2 sb1)
+    if (< sb2 0) { set neg 1 }
+    let rs3 = (withdraw sb2 100)
+    let sb3 = (unwrap_balance rs3 sb2)
+    if (< sb3 0) { set neg 1 }
+    let rs4 = (withdraw sb3 -5)
+    let sb4 = (unwrap_balance rs4 sb3)
+    if (< sb4 0) { set neg 1 }
+    let p13 = (check_eq 13 neg 0)
+    set passed (+ passed p13)
+
+    // #14 after each rejected op, balance equals pre-op balance.
+    //     Already asserted per-case in #7-#12 (the (b) checks). Summarize:
+    //     re-verify one rejected op leaves balance identical.
+    let r14a = (deposit 0 100)
+    let pre14b = (unwrap_balance r14a 0)
+    let r14 = (withdraw pre14b 500)
+    let post14 = (unwrap_balance r14 pre14b)
+    let p14 = (check_eq 14 post14 pre14b)
+    set passed (+ passed p14)
+
+    let _tot = (print "TOTAL_PASSED")
+    let _tv = (print passed)
+    return 0
+}
+
+// mul2pass: 1 only if BOTH sub-checks passed (rejection AND balance-unchanged).
+// Used so an error case counts as one passed case only when both halves hold.
+fn mul2pass(a: int, b: int) -> int {
+    if (== a 1) {
+        if (== b 1) {
+            return 1
+        }
+    }
+    return 0
+}

@@ -1,0 +1,514 @@
+-- Hand-written recursive-descent JSON parser in Vera.
+-- No standard JSON facilities (json_parse/json_stringify) are used.
+
+private data JVal {
+  JNull,
+  JBool(Bool),
+  JInt(Int),
+  JFloat(Float64),
+  JStr(String),
+  JArr(Array<JVal>),
+  JObj(Array<Tuple<String, JVal>>)
+}
+
+-- ASCII code helpers ----------------------------------------------------------
+
+private fn code_at(@String, @Nat -> @Int)
+  requires(true)
+  ensures(true)
+  effects(pure)
+{
+  if @Nat.0 < string_length(@String.0) then {
+    nat_to_int(string_char_code(@String.0, nat_to_int(@Nat.0)))
+  } else {
+    -1
+  }
+}
+
+private fn is_ws_code(@Int -> @Bool)
+  requires(true)
+  ensures(true)
+  effects(pure)
+{
+  if @Int.0 == 32 then { true } else {
+    if @Int.0 == 9 then { true } else {
+      if @Int.0 == 10 then { true } else {
+        if @Int.0 == 13 then { true } else { false }
+      }
+    }
+  }
+}
+
+private fn is_digit_code(@Int -> @Bool)
+  requires(true)
+  ensures(true)
+  effects(pure)
+{
+  if @Int.0 >= 48 then {
+    if @Int.0 <= 57 then { true } else { false }
+  } else { false }
+}
+
+-- skip whitespace, return new index
+private fn skip_ws(@String, @Nat -> @Nat)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  if is_ws_code(code_at(@String.0, @Nat.0)) then {
+    skip_ws(@String.0, @Nat.0 + 1)
+  } else {
+    @Nat.0
+  }
+}
+
+-- match a literal keyword at index; returns Some(end index) or None
+-- params: (src, start, kw)  => @String.0=kw (rightmost), @String.1=src
+private fn match_lit(@String, @Nat, @String -> @Option<Nat>)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  let @Nat = string_length(@String.0);   -- @Nat.0 = kw length, @Nat.1 = start
+  let @Nat = @Nat.1 + @Nat.0;            -- @Nat.0 = end, @Nat.1 = kwlen, @Nat.2 = start
+  if @Nat.0 > string_length(@String.1) then {
+    None
+  } else {
+    let @String = string_slice(@String.1, @Nat.2, @Nat.0);  -- slice(src, start, end)
+    if @String.0 == @String.1 then {
+      Some(@Nat.0)
+    } else {
+      None
+    }
+  }
+}
+
+-- Parse result wrapper for value parsing: (value, next index)
+-- We thread a Result<Tuple<JVal, Nat>, String>.
+
+-- Parse a string literal starting at index pointing at the opening quote.
+-- Returns Ok(Tuple(string_value, next_index)) or Err.
+private fn parse_string(@String, @Nat -> @Result<Tuple<String, Nat>, String>)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  -- @Nat.0 = index at opening quote
+  if code_at(@String.0, @Nat.0) != 34 then {
+    Err("expected string")
+  } else {
+    parse_string_body(@String.0, @Nat.0 + 1, "")
+  }
+}
+
+private fn parse_string_body(@String, @Nat, @String -> @Result<Tuple<String, Nat>, String>)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  -- @String.0 = accumulator, @String.1 = source
+  -- @Nat.0 = current index (after opening quote)
+  let @Int = code_at(@String.1, @Nat.0);
+  if @Int.0 == -1 then {
+    Err("unterminated string")
+  } else {
+    if @Int.0 == 34 then {
+      -- closing quote
+      Ok(Tuple(@String.0, @Nat.0 + 1))
+    } else {
+      if @Int.0 == 92 then {
+        -- backslash escape
+        let @Int = code_at(@String.1, @Nat.0 + 1);
+        if @Int.0 == 34 then {
+          parse_string_body(@String.1, @Nat.0 + 2, string_concat(@String.0, "\""))
+        } else {
+          if @Int.0 == 92 then {
+            parse_string_body(@String.1, @Nat.0 + 2, string_concat(@String.0, "\\"))
+          } else {
+            if @Int.0 == 110 then {
+              parse_string_body(@String.1, @Nat.0 + 2, string_concat(@String.0, "\n"))
+            } else {
+              Err("invalid escape")
+            }
+          }
+        }
+      } else {
+        let @String = string_slice(@String.1, @Nat.0, @Nat.0 + 1);  -- @String.0 = this char
+        -- @String.1 = accumulator, @String.2 = source
+        parse_string_body(@String.2, @Nat.0 + 1, string_concat(@String.1, @String.0))
+      }
+    }
+  }
+}
+
+-- Scan a number token starting at index. Returns Ok(Tuple(JVal, next)) or Err.
+-- Strict: no leading zeros (01 invalid), must have digit after '.', no '.5'.
+private fn parse_number(@String, @Nat -> @Result<Tuple<JVal, Nat>, String>)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  -- @Nat.0 = start index
+  let @Nat = scan_int_digits(@String.0, @Nat.0);   -- end of integer part
+  if @Nat.0 == @Nat.1 then {
+    Err("invalid number: no integer part")
+  } else {
+    -- validate leading zero: if first char is '0' and integer part length > 1 -> error
+    let @Int = code_at(@String.0, @Nat.1);  -- first digit (@Nat.1 = start)
+    if @Int.0 == 48 then {
+      if @Nat.0 > @Nat.1 + 1 then {
+        Err("leading zero")
+      } else {
+        parse_number_frac(@String.0, @Nat.1, @Nat.0)
+      }
+    } else {
+      parse_number_frac(@String.0, @Nat.0, @Nat.1)
+    }
+  }
+}
+
+private fn parse_number_frac(@String, @Nat, @Nat -> @Result<Tuple<JVal, Nat>, String>)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  -- params: (src, end_int, start) => @Nat.0 = start, @Nat.1 = end_int
+  let @Int = code_at(@String.0, @Nat.1);  -- char at end of integer part
+  if @Int.0 == 46 then {
+    -- decimal point; require at least one digit after
+    let @Nat = scan_int_digits(@String.0, @Nat.1 + 1);
+    -- now @Nat.0 = frac_end, @Nat.1 = start, @Nat.2 = end_int
+    if @Nat.0 == @Nat.2 + 1 then {
+      Err("no digits after decimal point")
+    } else {
+      let @String = string_slice(@String.0, @Nat.1, @Nat.0);  -- slice(src, start, frac_end)
+      match parse_float64(@String.0) {
+        Ok(@Float64) -> Ok(Tuple(JFloat(@Float64.0), @Nat.0)),
+        Err(@String) -> Err(@String.0)
+      }
+    }
+  } else {
+    -- integer: slice(src, start, end_int)
+    let @String = string_slice(@String.0, @Nat.0, @Nat.1);
+    match parse_int(@String.0) {
+      Ok(@Int) -> Ok(Tuple(JInt(@Int.0), @Nat.1)),
+      Err(@String) -> Err(@String.0)
+    }
+  }
+}
+
+private fn scan_int_digits(@String, @Nat -> @Nat)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  if is_digit_code(code_at(@String.0, @Nat.0)) then {
+    scan_int_digits(@String.0, @Nat.0 + 1)
+  } else {
+    @Nat.0
+  }
+}
+
+-- Parse any value starting at index (already at first non-ws char or not).
+private fn parse_value(@String, @Nat -> @Result<Tuple<JVal, Nat>, String>)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  let @Nat = skip_ws(@String.0, @Nat.0);
+  let @Int = code_at(@String.0, @Nat.0);
+  if @Int.0 == -1 then {
+    Err("unexpected end of input")
+  } else {
+    if @Int.0 == 110 then {
+      -- 'n' null
+      match match_lit(@String.0, @Nat.0, "null") {
+        Some(@Nat) -> Ok(Tuple(JNull, @Nat.0)),
+        None -> Err("invalid literal")
+      }
+    } else {
+      if @Int.0 == 116 then {
+        match match_lit(@String.0, @Nat.0, "true") {
+          Some(@Nat) -> Ok(Tuple(JBool(true), @Nat.0)),
+          None -> Err("invalid literal")
+        }
+      } else {
+        if @Int.0 == 102 then {
+          match match_lit(@String.0, @Nat.0, "false") {
+            Some(@Nat) -> Ok(Tuple(JBool(false), @Nat.0)),
+            None -> Err("invalid literal")
+          }
+        } else {
+          if @Int.0 == 34 then {
+            match parse_string(@String.0, @Nat.0) {
+              Ok(@Tuple<String, Nat>) -> match @Tuple<String, Nat>.0 {
+                Tuple(@String, @Nat) -> Ok(Tuple(JStr(@String.0), @Nat.0))
+              },
+              Err(@String) -> Err(@String.0)
+            }
+          } else {
+            if @Int.0 == 91 then {
+              parse_array(@String.0, @Nat.0 + 1, [])
+            } else {
+              if @Int.0 == 123 then {
+                parse_object(@String.0, @Nat.0 + 1, [])
+              } else {
+                if @Int.0 == 45 then {
+                  parse_number(@String.0, @Nat.0)
+                } else {
+                  if is_digit_code(@Int.0) then {
+                    parse_number(@String.0, @Nat.0)
+                  } else {
+                    Err("unexpected character")
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+-- Parse array elements. index points just after '[' or after a comma.
+private fn parse_array(@String, @Nat, @Array<JVal> -> @Result<Tuple<JVal, Nat>, String>)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  -- @Array<JVal>.0 = accumulated elements, @String.0 = source, @Nat.0 = index
+  let @Nat = skip_ws(@String.0, @Nat.0);
+  let @Int = code_at(@String.0, @Nat.0);
+  if @Int.0 == 93 then {
+    -- ']' : only valid if empty OR after element (handled by caller via comma)
+    if array_length(@Array<JVal>.0) == 0 then {
+      Ok(Tuple(JArr(@Array<JVal>.0), @Nat.0 + 1))
+    } else {
+      Ok(Tuple(JArr(@Array<JVal>.0), @Nat.0 + 1))
+    }
+  } else {
+    match parse_value(@String.0, @Nat.0) {
+      Err(@String) -> Err(@String.0),
+      Ok(@Tuple<JVal, Nat>) -> match @Tuple<JVal, Nat>.0 {
+        Tuple(@JVal, @Nat) -> {
+          let @Array<JVal> = array_append(@Array<JVal>.0, @JVal.0);
+          let @Nat = skip_ws(@String.0, @Nat.0);
+          let @Int = code_at(@String.0, @Nat.0);
+          if @Int.0 == 44 then {
+            -- comma: must be followed by another value (no trailing comma)
+            parse_array(@String.0, @Nat.0 + 1, @Array<JVal>.0)
+          } else {
+            if @Int.0 == 93 then {
+              Ok(Tuple(JArr(@Array<JVal>.0), @Nat.0 + 1))
+            } else {
+              Err("expected ',' or ']'")
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+private fn parse_object(@String, @Nat, @Array<Tuple<String, JVal>> -> @Result<Tuple<JVal, Nat>, String>)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  let @Nat = skip_ws(@String.0, @Nat.0);
+  let @Int = code_at(@String.0, @Nat.0);
+  if @Int.0 == 125 then {
+    Ok(Tuple(JObj(@Array<Tuple<String, JVal>>.0), @Nat.0 + 1))
+  } else {
+    -- expect a string key
+    if @Int.0 != 34 then {
+      Err("expected string key")
+    } else {
+      match parse_string(@String.0, @Nat.0) {
+        Err(@String) -> Err(@String.0),
+        Ok(@Tuple<String, Nat>) -> match @Tuple<String, Nat>.0 {
+          Tuple(@String, @Nat) -> {
+            -- @String.0 = key, @Nat.0 = index after key
+            let @Nat = skip_ws(@String.1, @Nat.0);
+            let @Int = code_at(@String.1, @Nat.0);
+            if @Int.0 != 58 then {
+              Err("expected ':'")
+            } else {
+              match parse_value(@String.1, @Nat.0 + 1) {
+                Err(@String) -> Err(@String.0),
+                Ok(@Tuple<JVal, Nat>) -> match @Tuple<JVal, Nat>.0 {
+                  Tuple(@JVal, @Nat) -> {
+                    let @Tuple<String, JVal> = Tuple(@String.0, @JVal.0);
+                    let @Array<Tuple<String, JVal>> = array_append(@Array<Tuple<String, JVal>>.0, @Tuple<String, JVal>.0);
+                    let @Nat = skip_ws(@String.1, @Nat.0);
+                    let @Int = code_at(@String.1, @Nat.0);
+                    if @Int.0 == 44 then {
+                      parse_object(@String.1, @Nat.0 + 1, @Array<Tuple<String, JVal>>.0)
+                    } else {
+                      if @Int.0 == 125 then {
+                        Ok(Tuple(JObj(@Array<Tuple<String, JVal>>.0), @Nat.0 + 1))
+                      } else {
+                        Err("expected ',' or '}'")
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+-- Top-level parse: parse value, then require only trailing whitespace.
+private fn parse_json(@String -> @Result<JVal, String>)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  match parse_value(@String.0, 0) {
+    Err(@String) -> Err(@String.0),
+    Ok(@Tuple<JVal, Nat>) -> match @Tuple<JVal, Nat>.0 {
+      Tuple(@JVal, @Nat) -> {
+        let @Nat = skip_ws(@String.0, @Nat.0);
+        if @Nat.0 == string_length(@String.0) then {
+          Ok(@JVal.0)
+        } else {
+          Err("trailing characters")
+        }
+      }
+    }
+  }
+}
+
+-- Canonical serialization for comparison ------------------------------------
+
+private fn ser(@JVal -> @String)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  match @JVal.0 {
+    JNull -> "null",
+    JBool(@Bool) -> if @Bool.0 then { "true" } else { "false" },
+    JInt(@Int) -> int_to_string(@Int.0),
+    JFloat(@Float64) -> float_to_string(@Float64.0),
+    JStr(@String) -> string_concat("\"", string_concat(@String.0, "\"")),
+    JArr(@Array<JVal>) -> {
+      let @String = ser_arr(@Array<JVal>.0, 0, "");
+      string_concat("[", string_concat(@String.0, "]"))
+    },
+    JObj(@Array<Tuple<String, JVal>>) -> {
+      let @String = ser_obj(@Array<Tuple<String, JVal>>.0, 0, "");
+      string_concat("{", string_concat(@String.0, "}"))
+    }
+  }
+}
+
+private fn ser_arr(@Array<JVal>, @Nat, @String -> @String)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  if @Nat.0 >= array_length(@Array<JVal>.0) then {
+    @String.0
+  } else {
+    let @String = if @Nat.0 == 0 then {
+      ser(@Array<JVal>.0[@Nat.0])
+    } else {
+      string_concat(",", ser(@Array<JVal>.0[@Nat.0]))
+    };
+    ser_arr(@Array<JVal>.0, @Nat.0 + 1, string_concat(@String.1, @String.0))
+  }
+}
+
+private fn ser_obj(@Array<Tuple<String, JVal>>, @Nat, @String -> @String)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  if @Nat.0 >= array_length(@Array<Tuple<String, JVal>>.0) then {
+    @String.0
+  } else {
+    let @String = match @Array<Tuple<String, JVal>>.0[@Nat.0] {
+      Tuple(@String, @JVal) -> string_concat(string_concat("\"", string_concat(@String.0, "\":")), ser(@JVal.0))
+    };
+    let @String = if @Nat.0 == 0 then {
+      @String.0
+    } else {
+      string_concat(",", @String.0)
+    };
+    ser_obj(@Array<Tuple<String, JVal>>.0, @Nat.0 + 1, string_concat(@String.1, @String.0))
+  }
+}
+
+-- Test harness --------------------------------------------------------------
+
+-- Run a normal case: parse input, compare serialized value to expected.
+private fn check_normal(@String, @String -> @Bool)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  -- @String.0 = expected serialization, @String.1 = input
+  match parse_json(@String.1) {
+    Err(@String) -> false,
+    Ok(@JVal) -> ser(@JVal.0) == @String.0
+  }
+}
+
+-- Run an error case: parse must return Err.
+private fn check_error(@String -> @Bool)
+  requires(true)
+  ensures(true)
+  effects(<Diverge>)
+{
+  match parse_json(@String.0) {
+    Err(@String) -> true,
+    Ok(@JVal) -> false
+  }
+}
+
+private fn b2i(@Bool -> @Int)
+  requires(true)
+  ensures(true)
+  effects(pure)
+{
+  if @Bool.0 then { 1 } else { 0 }
+}
+
+public fn main(-> @Unit)
+  requires(true)
+  ensures(true)
+  effects(<IO, Diverge>)
+{
+  -- Normal cases (13)
+  let @Int = b2i(check_normal("null", "null"));
+  let @Int = @Int.0 + b2i(check_normal("true", "true"));
+  let @Int = @Int.0 + b2i(check_normal("false", "false"));
+  let @Int = @Int.0 + b2i(check_normal("42", "42"));
+  let @Int = @Int.0 + b2i(check_normal("3.14", "3.14"));
+  let @Int = @Int.0 + b2i(check_normal("\"hello\"", "\"hello\""));
+  let @Int = @Int.0 + b2i(check_normal("\"a\"b\"", "\"a\\\"b\""));
+  let @Int = @Int.0 + b2i(check_normal("[]", "[]"));
+  let @Int = @Int.0 + b2i(check_normal("{}", "{}"));
+  let @Int = @Int.0 + b2i(check_normal("[1,2,3]", "[1, 2, 3]"));
+  let @Int = @Int.0 + b2i(check_normal("{\"a\":1,\"b\":true}", "{\"a\": 1, \"b\": true}"));
+  let @Int = @Int.0 + b2i(check_normal("{\"a\":[1,{\"b\":null}]}", "{\"a\": [1, {\"b\": null}]}"));
+  let @Int = @Int.0 + b2i(check_normal("42", " 42 "));
+  -- Error cases (9)
+  let @Int = @Int.0 + b2i(check_error(""));
+  let @Int = @Int.0 + b2i(check_error("[1, 2, ]"));
+  let @Int = @Int.0 + b2i(check_error("[1, 2"));
+  let @Int = @Int.0 + b2i(check_error("{\"a\": 1"));
+  let @Int = @Int.0 + b2i(check_error("01"));
+  let @Int = @Int.0 + b2i(check_error("1."));
+  let @Int = @Int.0 + b2i(check_error(".5"));
+  let @Int = @Int.0 + b2i(check_error("foo"));
+  let @Int = @Int.0 + b2i(check_error("\"abc"));
+  IO.print("PASS \(@Int.0)/22\n");
+  ()
+}

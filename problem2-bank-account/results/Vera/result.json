@@ -1,0 +1,57 @@
+{
+  "language": "Vera",
+  "conditions": {
+    "A": {
+      "status": "DONE",
+      "pass_at_1": false,
+      "fix_rounds": 4,
+      "final_pass_count": "14/14",
+      "loc": 153,
+      "tokens": 714,
+      "self_recovered": true,
+      "error_quality": "structured - E001 'missing contract block' prints a full worked requires()/ensures()/effects() example; E130 slot errors state how many bindings of a type are in scope and the valid index range; E500 prints SMT counterexamples. Caveat: the anonymous param-binder terminal renders as __ANON_0 in 'Expected one of' lists (the biggest source of confusion).",
+      "notes": "Invariant enforcement = AI hand-written/structured (NOT machine-verified in the final runnable code). Recovered Vera's positional, type-indexed (De Bruijn) model entirely from compiler errors with NO guide. The >=0 guarantee comes from structure: deposit rejects amount<=0; withdraw rejects amount<=0 or amount>balance; settle returns the new balance on Ok and the unchanged old balance on Err. The model TRIED to make >=0 SMT-proven via `vera verify` (Int and Nat payload) but the verifier emits a spurious counterexample on any ensures over a match-bodied function (reports result=0 as a counterexample to result>=0); an isolated identity fn does verify ensures(@Nat.result>=0). So under Pattern A the invariant ended up hand-structured, not Z3-proven.",
+      "attempts": [
+        {"attempt": 1, "pass_count": 0, "failed_cases": ["C/Rust-style syntax rejected"]},
+        {"attempt": 2, "pass_count": 0, "failed_cases": ["probing positional param + contract"]},
+        {"attempt": 3, "pass_count": 0, "failed_cases": ["// comments + lowercase let names rejected"]},
+        {"attempt": 4, "pass_count": 0, "failed_cases": ["// comments rejected (E005)"]},
+        {"attempt": 5, "pass_count": 14, "failed_cases": []}
+      ],
+      "raw_error_excerpts": [
+        "[E005] Unexpected '/' ... Expected: ABILITY, DATA, EFFECT, FN, FORALL, IMPORT, MODULE, PRIVATE (// not a comment; -- and /* */ are)",
+        "[E005] fn main() Unexpected ')' Expected: AT, __ANON_0 (params required; __ANON_0 opaque)",
+        "[E001] Function is missing its contract block. Fix: requires(true)/ensures(@Int.result >= 0)/effects(pure) { ... }",
+        "[E130] Cannot resolve @Int.1: only 1 Int binding(s) in scope (valid indices: 0..0)",
+        "[E500] Postcondition does not hold in 'settle'. Counterexample: @Int.0=0, @Outcome.0=Ok(0), @Int.result=0 (spurious; verifier can't propagate ensures through match)"
+      ],
+      "toolchain_notes": "vera 0.0.160 (Z3 bundled). vera check/run/verify. NO SKILL.md/grammar/examples read. INTEGRITY NOTE (self-reported by worker): a leftover /tmp/probe.vera (not created by the worker) containing a Vera example was inadvertently cat'd once; the worker states it had already derived @Type params/public fn/contract clauses from compiler errors before that and treated the compiler's own E001 worked-example as source of truth. Recorded here for honesty.",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "vera run attempt_5.vera", "result": "PASS 14 out of 14"}
+    },
+    "B": {
+      "status": "DONE",
+      "pass_at_1": false,
+      "fix_rounds": 1,
+      "final_pass_count": "14/14",
+      "loc": 216,
+      "tokens": 1004,
+      "self_recovered": true,
+      "error_quality": "structured - Result<Nat,String> with descriptive Err messages; E130 slot-index errors precise; CodegenSkip messages explain what the runtime-check codegen cannot lower.",
+      "notes": "Invariant enforcement = LANGUAGE-GUARANTEED (type-level + Z3), reached from the guide WITHOUT being told to use contracts. Final attempt_2.vera carries the balance as a Nat (non-negative by construction) through deposit/withdraw/balance, with Ok payloads typed Nat. `vera verify` (Z3, Tier 1) ACTUALLY RAN and proved 42 verification conditions, including the Int->Nat non-negativity obligations on Ok(@Nat.0 + @Int.0) / Ok(@Nat.0 - @Int.0) and the balance() postcondition. attempt_1.vera additionally had richer hand-written postconditions relating Ok balance to old+/-amount and asserting errors leave input unchanged; those ALSO passed vera verify (14 verified) but could not be lowered by the `vera run` runtime-check codegen (CodegenSkip: match scrutinee WASM type), so attempt_2 relaxed them to ensures(true) to stay runnable while keeping the Nat-type guarantee. Net: the >=0 invariant is a language-verified property (type-level, Z3-discharged), not merely a hand-written runtime check.",
+      "attempts": [
+        {"attempt": 1, "pass_count": 0, "failed_cases": ["E130 slot-index, then CodegenSkip on match-in-postcondition under vera run; vera check+verify passed (14 verified)"]},
+        {"attempt": 2, "pass_count": 14, "failed_cases": []}
+      ],
+      "raw_error_excerpts": [
+        "[E130] Cannot resolve @Nat.1: only 1 Nat binding(s) in scope (valid indices: 0..0)",
+        "vera.skip.CodegenSkip: could not infer match scrutinee WASM type (vera run; vera check & verify still passed)",
+        "attempt_2 vera run: PASS 14/14 ; vera verify: OK / 42 verified (Tier 1)"
+      ],
+      "toolchain_notes": "vera 0.0.160 (Z3 bundled). Guide source that worked: curl -fsSL https://veralang.dev/SKILL.md (network fetch succeeded in container). vera check / vera run / vera verify (42 verified Tier 1 on attempt_2; balance VERIFIED, deposit/withdraw/main trivial-or-ADT-param SKIPPED). Z3 bundled, no extra install.",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "vera run attempt_2.vera ; vera verify attempt_2.vera", "result": "PASS 14/14 ; OK: 42 verified (Tier 1)"}
+    }
+  },
+  "status": "DONE"
+}

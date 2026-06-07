@@ -1,0 +1,28 @@
+{
+  "language": "NanoLang",
+  "condition": "A",
+  "status": "DONE",
+  "pass_at_1": true,
+  "fix_rounds": 0,
+  "final_pass_count": "14/14",
+  "loc": 152,
+  "tokens": 1233,
+  "error_channel": "sum-type",
+  "self_recovered": true,
+  "error_quality": "structured - typed, named diagnostics with line/caret/hints; the message 'Expected { after variant name (got LPAREN)' directly revealed that union variants carry payload via struct-style braces, which unlocked the Result-like error channel.",
+  "notes": "Pattern A (spec + testcases + rubric only; NO grammar guide, NO other solutions read). All NanoLang syntax recovered purely from the interpreter's diagnostics on throwaway probe files. Error channel = a payload-carrying union 'union OpResult { Ok { balance: int } Err { code: int } }'. deposit/withdraw return OpResult: Ok carries the new balance, Err carries an int error code (1=non-positive amount, 2=insufficient funds). The rejection signal is the Err VARIANT itself (a sum type), so callers branch in code via is_err()/match -- not a print side-effect. Harness for #7-#12 asserts BOTH (a) is_err(result)==1 AND (b) balance unchanged (combined via mul2pass). #13 asserts balance never < 0 across a mixed sequence; #14 asserts post==pre after a rejected op. Invariant balance>=0 is enforced by AI hand-written guards + the type-distinct error channel; not a language-verified contract. Note: nested struct payloads in union variants do not type-check, so payloads carry primitive int directly (this differs from the generic Result<T,E> wrapping an Account used elsewhere). Independently verified by the report author: source inspected + container re-run twice, deterministic 'TOTAL_PASSED 14', exit 0.",
+  "attempts": [
+    {"attempt": 1, "pass_count": "14/14", "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "Error at line 1, column 11: Expected '->' after parameters (got LBRACE)  [fn needs explicit return type]",
+    "Hint: If you meant to call a function, use (function_name args). If you meant to assign, use set.  [S-expression calls + 'set' for mutation]",
+    "Expected '{' after variant name (got LPAREN)  [union variant payload uses braces -> Result-like channel is possible]",
+    "Expected ':' after field name (got ASSIGN)  [struct/variant fields use 'name: value']",
+    "Expected '(' after variant name in match (got LBRACE)  [match binds variant payload with (binding)]",
+    "Cannot determine struct type for field access  [nested struct payload not resolvable -> forced primitive int payloads]"
+  ],
+  "rerun_log": "rerun.log",
+  "toolchain_notes": "nanolang interpreter (tree-walk). Run: nanolang attempt_1.nano via docker run --rm -v <repo>:/bench -w /bench/problem2-bank-account/results/NanoLang/A ai-lang-bench bash -lc 'nanolang attempt_1.nano'. CONFIRM: did NOT read /opt/nanolang docs/README/examples or prompts/NanoLang.md or any other results/ solution; syntax recovered from prior knowledge + interpreter diagnostics on throwaway probe files (since deleted).",
+  "self_recovered_normalized": true
+}

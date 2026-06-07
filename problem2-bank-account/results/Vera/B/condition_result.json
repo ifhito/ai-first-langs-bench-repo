@@ -1,0 +1,25 @@
+{
+  "language": "Vera",
+  "condition": "B",
+  "status": "DONE",
+  "pass_at_1": false,
+  "fix_rounds": 1,
+  "final_pass_count": "14/14",
+  "loc": 216,
+  "tokens": 1004,
+  "self_recovered": true,
+  "error_quality": "Errors are Result<Nat,String> with descriptive Err messages ('amount must be a positive integer', 'insufficient funds'); idiomatic Vera convention (prelude Result type), no exceptions.",
+  "notes": "FINAL code (attempt_2.vera) guarantees balance>=0 primarily at the TYPE level: deposit/withdraw/balance all carry the balance as a Nat (non-negative by construction), and the Ok payload of deposit/withdraw is a Nat. `vera verify` (Z3, Tier 1) actually ran and proved 42 verification conditions, which include the Int->Nat non-negativity obligations on Ok(@Nat.0 + @Int.0) and Ok(@Nat.0 - @Int.0) plus the balance() postcondition. attempt_1.vera additionally carried RICHER hand-written postconditions matching on @Result.result that relate the Ok balance to old+/-amount and assert errors leave the input unchanged; those ALSO passed `vera verify` (14 verified, Tier 1). However those match-on-ADT-result postconditions cannot be lowered by the `vera run` runtime-check codegen (CodegenSkip: 'could not infer match scrutinee WASM type'), so attempt_2 relaxes them to ensures(true) to keep the program runnable while preserving the Nat-type guarantee. Net: the >=0 invariant is a language-verified property (type-level, Z3-discharged), not just a hand-written runtime check; the exact arithmetic relations are hand-written contracts proven by Z3 in attempt_1 but not enforced at runtime in the runnable build.",
+  "attempts": [
+    {"attempt": 1, "pass_count": 0, "failed_cases": ["all (did not run: E130 slot-index errors, then CodegenSkip on match-in-postcondition under vera run; vera check+verify passed with 14 verified)"]},
+    {"attempt": 2, "pass_count": 14, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "[E130] Cannot resolve @Nat.1: only 1 Nat binding(s) in scope (valid indices: 0..0). Slot reference @Nat.1 requires at least 2 binding(s) of type Nat. (attempt_1, fixed by using @Nat.0 for the single balance parameter in the function body)",
+    "vera.skip.CodegenSkip: codegen skip on ResultRef: could not infer match scrutinee WASM type (vera run on attempt_1: match on @Result.result inside ensures cannot be lowered to a WASM runtime check; vera check and vera verify still passed)",
+    "vera.skip.CodegenSkip: codegen skip on FnCall: call target 'result_unwrap_or$Int_Bool' not registered in this module (probe: even result_unwrap_or() in a postcondition breaks `vera run` codegen)",
+    "First harness run printed 'PASS 176/14' due to fragile De Bruijn slot summation in main; fixed by extracting each test into its own t1..t14 function and summing the 14 calls."
+  ],
+  "toolchain_notes": "Guide source that worked: curl -fsSL https://veralang.dev/SKILL.md (the network fetch succeeded inside the container; SKILL.md, vera-language reference). vera version: 0.0.160 (Z3 bundled). Docker pattern: docker run --rm -v \"$PWD\":/work -w /work ai-lang-bench bash -lc 'vera check attempt_2.vera'; same for `vera verify` and `vera run`. `vera verify` DID run and proved 42 conditions Tier 1 on attempt_2 (14 on attempt_1's richer contracts). `vera test attempt_2.vera`: balance VERIFIED Tier 1, deposit/withdraw/main SKIPPED (trivial contracts / Unit-or-ADT params). Z3 is bundled; no separate install needed.",
+  "self_recovered_normalized": true
+}

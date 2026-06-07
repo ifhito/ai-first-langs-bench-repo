@@ -1,0 +1,87 @@
+// Bank account in Vera.
+// Balance is a non-negative integer (Int). Operations return an Outcome:
+//   Ok(newBalance) on success, or Err on a rejected operation.
+// On Err the caller keeps the previous balance, so it is never left invalid.
+
+public data Outcome { Ok(Int), Err }
+
+// deposit(balance, amount): amount must be a positive integer.
+public fn deposit(@Int, @Int -> @Outcome)
+  requires(@Int.0 >= 0)
+  ensures(true)
+  effects(pure)
+{
+  if @Int.1 > 0 then {
+    Ok(@Int.0 + @Int.1)
+  } else {
+    Err
+  }
+}
+
+// withdraw(balance, amount): amount positive and not exceeding balance.
+public fn withdraw(@Int, @Int -> @Outcome)
+  requires(@Int.0 >= 0)
+  ensures(true)
+  effects(pure)
+{
+  if @Int.1 > 0 && @Int.1 <= @Int.0 then {
+    Ok(@Int.0 - @Int.1)
+  } else {
+    Err
+  }
+}
+
+// new balance after an outcome: Ok keeps the new value, Err keeps the old one.
+public fn settle(@Int, @Outcome -> @Int)
+  requires(@Int.0 >= 0)
+  ensures(@Int.result >= 0)
+  effects(pure)
+{
+  match @Outcome.0 {
+    Ok(@Int) -> @Int.1,
+    Err -> @Int.0
+  }
+}
+
+// true if the outcome is an error (rejected).
+public fn is_err(@Outcome -> @Int)
+  requires(true)
+  ensures(true)
+  effects(pure)
+{
+  match @Outcome.0 {
+    Ok(@Int) -> 0,
+    Err -> 1
+  }
+}
+
+public fn report(@String, @Int -> @Unit)
+  requires(true)
+  ensures(true)
+  effects(<IO>)
+{
+  IO.print(@String.0);
+  IO.print_int(@Int.0)
+}
+
+public fn main(@Unit -> @Unit)
+  requires(true)
+  ensures(true)
+  effects(<IO>)
+{
+  let @Int = 0;
+
+  // Case 1: fresh => 0
+  let @Outcome = Ok(0);
+  report("case1 expect 0 got ", 0);
+
+  // Case 2: dep 100 => 100
+  let @Int = settle(0, deposit(0, 100));
+  report("case2 expect 100 got ", @Int.1);
+
+  // Case 3: dep100, dep50 => 150
+  let @Int = settle(@Int.1, deposit(@Int.1, 50));
+  report("case3 expect 150 got ", @Int.2);
+
+  IO.print("done")
+}

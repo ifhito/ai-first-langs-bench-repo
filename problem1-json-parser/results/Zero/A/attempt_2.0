@@ -1,0 +1,371 @@
+// JSON parser by hand (recursive descent), Zero (zerolang) v0.2.1.
+// Backend/compiler constraints discovered via raw diagnostics on own code:
+//   - no ADT payloads, no record/char locals, no string concat,
+//   - no string length accessor, no globals, no tuples.
+//   - MUTUAL recursion between multi-branch functions makes `zero check` hang;
+//     so array/object parsing is INLINED into a single self-recursive pv().
+// Buffer = (String s, i32 len). Position threaded via return value.
+// pv(s,len,i) -> next index after a value, or -1 on error.
+
+fn is_ws(b: u8) -> Bool {
+  return b == 32 || b == 9 || b == 10 || b == 13
+}
+
+fn is_digit(b: u8) -> Bool {
+  return b >= 48 && b <= 57
+}
+
+fn skip_ws(s: String, len: i32, i: i32) -> i32 {
+  var j: i32 = i
+  while j < len {
+    if is_ws(s[j]) {
+      j = j + 1
+    } else {
+      return j
+    }
+  }
+  return j
+}
+
+// integer part end: 0 | [1-9][0-9]*  (i already past optional minus)
+fn int_end(s: String, len: i32, i: i32) -> i32 {
+  var j: i32 = i
+  if j >= len {
+    return -1
+  }
+  if s[j] == 48 {
+    j = j + 1
+    if j < len {
+      if is_digit(s[j]) {
+        return -1
+      }
+    }
+    return j
+  }
+  if is_digit(s[j]) == false {
+    return -1
+  }
+  while j < len {
+    if is_digit(s[j]) {
+      j = j + 1
+    } else {
+      return j
+    }
+  }
+  return j
+}
+
+// number: -? int frac?   frac = . [0-9]+   (rejects 01, 1., .5)
+fn parse_number(s: String, len: i32, i: i32) -> i32 {
+  var k: i32 = i
+  if k < len {
+    if s[k] == 45 {
+      k = k + 1
+    }
+  }
+  let ie: i32 = int_end(s, len, k)
+  if ie < 0 {
+    return -1
+  }
+  var j: i32 = ie
+  if j < len {
+    if s[j] == 46 {
+      j = j + 1
+      if j >= len {
+        return -1
+      }
+      if is_digit(s[j]) == false {
+        return -1
+      }
+      while j < len {
+        if is_digit(s[j]) {
+          j = j + 1
+        } else {
+          return j
+        }
+      }
+      return j
+    }
+  }
+  return j
+}
+
+// string: opening quote at i. escapes: \" \\ \n only.
+fn parse_string(s: String, len: i32, i: i32) -> i32 {
+  var j: i32 = i
+  if j >= len {
+    return -1
+  }
+  if s[j] != 34 {
+    return -1
+  }
+  j = j + 1
+  while j < len {
+    let c: u8 = s[j]
+    if c == 34 {
+      return j + 1
+    }
+    if c == 92 {
+      j = j + 1
+      if j >= len {
+        return -1
+      }
+      let e: u8 = s[j]
+      if e == 34 || e == 92 || e == 110 {
+        j = j + 1
+      } else {
+        return -1
+      }
+    } else {
+      j = j + 1
+    }
+  }
+  return -1
+}
+
+// single self-recursive value parser (array/object inlined to avoid the
+// mutual-recursion compiler hang).
+fn pv(s: String, len: i32, i: i32) -> i32 {
+  let k: i32 = skip_ws(s, len, i)
+  if k >= len {
+    return -1
+  }
+  let c: u8 = s[k]
+  // null
+  if c == 110 {
+    if k + 4 > len {
+      return -1
+    }
+    if s[k + 1] == 117 && s[k + 2] == 108 && s[k + 3] == 108 {
+      return k + 4
+    }
+    return -1
+  }
+  // true
+  if c == 116 {
+    if k + 4 > len {
+      return -1
+    }
+    if s[k + 1] == 114 && s[k + 2] == 117 && s[k + 3] == 101 {
+      return k + 4
+    }
+    return -1
+  }
+  // false
+  if c == 102 {
+    if k + 5 > len {
+      return -1
+    }
+    if s[k + 1] == 97 && s[k + 2] == 108 && s[k + 3] == 115 && s[k + 4] == 101 {
+      return k + 5
+    }
+    return -1
+  }
+  // string
+  if c == 34 {
+    return parse_string(s, len, k)
+  }
+  // number
+  if c == 45 || is_digit(c) {
+    return parse_number(s, len, k)
+  }
+  // array
+  if c == 91 {
+    var j: i32 = k + 1
+    j = skip_ws(s, len, j)
+    if j >= len {
+      return -1
+    }
+    if s[j] == 93 {
+      return j + 1
+    }
+    while j < len {
+      let e: i32 = pv(s, len, j)
+      if e < 0 {
+        return -1
+      }
+      j = skip_ws(s, len, e)
+      if j >= len {
+        return -1
+      }
+      if s[j] == 93 {
+        return j + 1
+      }
+      if s[j] == 44 {
+        j = j + 1
+      } else {
+        return -1
+      }
+    }
+    return -1
+  }
+  // object
+  if c == 123 {
+    var j: i32 = k + 1
+    j = skip_ws(s, len, j)
+    if j >= len {
+      return -1
+    }
+    if s[j] == 125 {
+      return j + 1
+    }
+    while j < len {
+      j = skip_ws(s, len, j)
+      if j >= len {
+        return -1
+      }
+      if s[j] != 34 {
+        return -1
+      }
+      let ke: i32 = parse_string(s, len, j)
+      if ke < 0 {
+        return -1
+      }
+      j = skip_ws(s, len, ke)
+      if j >= len {
+        return -1
+      }
+      if s[j] != 58 {
+        return -1
+      }
+      j = j + 1
+      let ve: i32 = pv(s, len, j)
+      if ve < 0 {
+        return -1
+      }
+      j = skip_ws(s, len, ve)
+      if j >= len {
+        return -1
+      }
+      if s[j] == 125 {
+        return j + 1
+      }
+      if s[j] == 44 {
+        j = j + 1
+      } else {
+        return -1
+      }
+    }
+    return -1
+  }
+  return -1
+}
+
+// top level: one value with optional surrounding ws, full consumption
+fn json_ok(s: String, len: i32) -> Bool {
+  if len == 0 {
+    return false
+  }
+  let e: i32 = pv(s, len, 0)
+  if e < 0 {
+    return false
+  }
+  let f: i32 = skip_ws(s, len, e)
+  if f == len {
+    return true
+  }
+  return false
+}
+
+// ---- value extractors for native-value comparison of NORMAL cases ----
+fn first_byte(s: String, len: i32) -> u8 {
+  let a: i32 = skip_ws(s, len, 0)
+  return s[a]
+}
+
+fn extract_int(s: String, len: i32) -> i32 {
+  var j: i32 = skip_ws(s, len, 0)
+  var neg: Bool = false
+  if j < len {
+    if s[j] == 45 {
+      neg = true
+      j = j + 1
+    }
+  }
+  var acc: i32 = 0
+  while j < len {
+    if is_digit(s[j]) {
+      acc = acc * 10 + ((s[j] as i32) - 48)
+      j = j + 1
+    } else {
+      j = len
+    }
+  }
+  if neg {
+    return 0 - acc
+  }
+  return acc
+}
+
+// ---- harness ----
+fn report(world: World, name: String, ok: Bool) -> i32 raises {
+  if ok {
+    check world.out.write("PASS ")
+  } else {
+    check world.out.write("FAIL ")
+  }
+  check world.out.write(name)
+  check world.out.write("\n")
+  if ok {
+    return 1
+  }
+  return 0
+}
+
+pub fn main(world: World) -> Void raises {
+  var pass: i32 = 0
+
+  pass = pass + report(world, "1 null", json_ok("null", 4) && first_byte("null", 4) == 110)
+  pass = pass + report(world, "2 true", json_ok("true", 4) && first_byte("true", 4) == 116)
+  pass = pass + report(world, "3 false", json_ok("false", 5) && first_byte("false", 5) == 102)
+  pass = pass + report(world, "4 42", json_ok("42", 2) && extract_int("42", 2) == 42)
+  pass = pass + report(world, "5 3.14", json_ok("3.14", 4))
+  pass = pass + report(world, "6 hello", json_ok("\"hello\"", 7))
+  pass = pass + report(world, "7 a-quote-b", json_ok("\"a\\\"b\"", 6))
+  pass = pass + report(world, "8 empty-arr", json_ok("[]", 2))
+  pass = pass + report(world, "9 empty-obj", json_ok("{}", 2))
+  pass = pass + report(world, "10 arr123", json_ok("[1, 2, 3]", 9))
+  pass = pass + report(world, "11 obj", json_ok("{\"a\": 1, \"b\": true}", 19))
+  pass = pass + report(world, "12 nested", json_ok("{\"a\": [1, {\"b\": null}]}", 23))
+  pass = pass + report(world, "13 spaced42", json_ok(" 42 ", 4) && extract_int(" 42 ", 4) == 42)
+
+  pass = pass + report(world, "14 empty", json_ok("", 0) == false)
+  pass = pass + report(world, "15 trailing-comma", json_ok("[1, 2, ]", 8) == false)
+  pass = pass + report(world, "16 unterminated-arr", json_ok("[1, 2", 5) == false)
+  pass = pass + report(world, "17 unterminated-obj", json_ok("{\"a\": 1", 7) == false)
+  pass = pass + report(world, "18 leading-zero", json_ok("01", 2) == false)
+  pass = pass + report(world, "19 dot-no-frac", json_ok("1.", 2) == false)
+  pass = pass + report(world, "20 dot-leading", json_ok(".5", 2) == false)
+  pass = pass + report(world, "21 foo", json_ok("foo", 3) == false)
+  pass = pass + report(world, "22 unterminated-str", json_ok("\"abc", 4) == false)
+
+  check world.out.write("PASS ")
+  check world.out.write(int_str(pass))
+  check world.out.write("/22\n")
+}
+
+fn int_str(n: i32) -> String {
+  if n == 22 { return "22" }
+  if n == 21 { return "21" }
+  if n == 20 { return "20" }
+  if n == 19 { return "19" }
+  if n == 18 { return "18" }
+  if n == 17 { return "17" }
+  if n == 16 { return "16" }
+  if n == 15 { return "15" }
+  if n == 14 { return "14" }
+  if n == 13 { return "13" }
+  if n == 12 { return "12" }
+  if n == 11 { return "11" }
+  if n == 10 { return "10" }
+  if n == 9 { return "9" }
+  if n == 8 { return "8" }
+  if n == 7 { return "7" }
+  if n == 6 { return "6" }
+  if n == 5 { return "5" }
+  if n == 4 { return "4" }
+  if n == 3 { return "3" }
+  if n == 2 { return "2" }
+  if n == 1 { return "1" }
+  return "0"
+}

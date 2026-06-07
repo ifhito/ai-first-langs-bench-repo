@@ -1,0 +1,11 @@
+# keep the build context small & deterministic
+.git
+**/.DS_Store
+**/__pycache__
+**/*.pyc
+**/node_modules
+# Zero / native build artifacts that may appear under results/
+**/*.o
+**/*.obj
+**/zig-cache
+**/.moon

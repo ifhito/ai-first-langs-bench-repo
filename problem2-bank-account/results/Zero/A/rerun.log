@@ -1,0 +1,6 @@
+## condition: Zero/A
+## command: indir problem2-bank-account/results/Zero/A zero run attempt_2.0
+## date(host): 2026-06-07T14:01:17Z
+----- stdout+stderr -----
+----- exit code -----
+14

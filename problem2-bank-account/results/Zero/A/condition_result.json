@@ -1,0 +1,30 @@
+{
+  "language": "Zero",
+  "condition": "A",
+  "status": "DONE",
+  "pass_at_1": false,
+  "fix_rounds": 1,
+  "final_pass_count": "14/14",
+  "loc": 178,
+  "tokens": 869,
+  "self_recovered": true,
+  "error_quality": "structured/free + JSON diagnostics with code/message/expected/actual/help/repair fields, e.g. \"expected canonical declaration\" actual \"struct\", and BLD004 \"direct backend MVP does not support declarations other than functions\"",
+  "notes": "FINAL code guarantees balance>=0 via HAND-WRITTEN checks, not the type system. The account state is a plain i64 balance threaded through value-returning functions (the direct AArch64 backend MVP rejects record/struct local types and non-function top-level declarations, so an idiomatic Account struct + Result enum could not be built on this host target; the language accepts them: zero check reports languageOk=true but buildable=false). deposit/withdraw return the new balance, or the literal -1 as an error sentinel (safe because a valid balance is always >= 0). The apply() helper keeps the previous balance whenever a result is negative, so rejected operations leave the balance unchanged and it can never become negative. Negative amounts and zero are rejected by amount<=0; overlimit withdrawals by amount>bal. There is no compiler-verified contract on the invariant; correctness rests on the explicit guards plus the >=0/-1 sentinel discipline. Pass count is reported via the process exit code (return passed) because no stdout/println std helper could be recovered from diagnostics within the narrow bootstrap stdlib surface.",
+  "attempts": [
+    {"attempt": 1, "pass_count": 0, "failed_cases": ["all - did not compile: PAR100 'expected canonical declaration' on 'struct'; original guesses (struct/fn-without-arrow/Result/match/println/let-top-level) were wrong for canonical Zero"]},
+    {"attempt": 2, "pass_count": 14, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "attempt_1 (struct version): PAR100 'expected canonical declaration' expected 'declaration' actual 'struct' help 'use canonical .0 text source'",
+    "probe: 'fn main() {}' -> 'expected return type arrow' expected '->' actual '{' (void fns still need -> Void)",
+    "probe: 'export fn' -> PAR100 'expected export c fn' (export entry syntax is 'export c fn')",
+    "probe: record local -> BLD004 'direct AArch64 object buildability does not support this local type' actual 'record' (languageOk=true, buildable=false)",
+    "probe: 'let x = 5' inside fn -> 'canonical local bindings require a type annotation' expected ':' actual '='",
+    "probe: 'var ok: bool' -> TYP002 'let binding type does not match initializer' expected 'bool' actual 'Bool' (types are capitalized: Bool, Void, i64)",
+    "attempt_2 top-level 'let ERR' -> PAR100 'expected canonical declaration' actual 'let'; 'const ERR' -> BLD004 'direct backend MVP does not support declarations other than functions' (inlined -1 instead)",
+    "probe: 'std.io.println' -> 'unknown std helper' help 'use a documented std helper name' (no output helper recoverable without reading the stdlib guide; used exit code instead)",
+    "attempt_2 final: zero check ok=true, buildable=true, stage 'ready'; zero run exit=14"
+  ],
+  "toolchain_notes": "zero 0.2.1. Docker: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem2-bank-account/results/Zero/A ai-lang-bench bash -lc '<cmd>'. Invoked via 'zero check --json attempt_N.0' (reports ok/languageOk/buildable + structured diagnostics) and 'zero run attempt_N.0' (builds via direct AArch64 ELF backend and runs; process exit code = main's i64 return = pass count). Bare-file run IS supported (no scaffold needed). Also used 'zero --version', 'zero --help', 'zero targets', 'zero explain --json <CODE>', 'zero tokens --json'. Syntax was recovered ENTIRELY from compiler diagnostics and my own prior knowledge of Zero. CONFIRM: did NOT read any Zero language/stdlib guide, did NOT run 'zero skills get language/stdlib', did NOT read example programs, did NOT scaffold 'zero new'. (zero skills list was viewed only to confirm those guides exist and were deliberately avoided.)",
+  "self_recovered_normalized": true
+}

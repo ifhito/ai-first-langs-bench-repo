@@ -1,0 +1,7 @@
+## condition: MoonBit/B
+## command: indir problem2-bank-account/results/MoonBit/B/bankacct moon test
+## date(host): 2026-06-07T14:01:19Z
+----- stdout+stderr -----
+Total tests: 14, passed: 14, failed: 0.
+----- exit code -----
+0

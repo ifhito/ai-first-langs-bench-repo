@@ -1,0 +1,32 @@
+{
+  "language": "Zero",
+  "condition": "B",
+  "status": "DONE",
+  "pass_at_1": false,
+  "fix_rounds": 4,
+  "final_pass_count": "14/14",
+  "loc": 227,
+  "tokens": 1233,
+  "self_recovered": true,
+  "error_quality": "Excellent: structured JSON diagnostics with stable codes (BLD004, TYP009, ERR003, PAR100), precise line/column spans, expected/actual facts, help text, repair hints, and a full safetyFacts block. `zero explain <code>` gives prose + bad/good examples. The backend-buildability diagnostics (BLD004) clearly named each unsupported construct (ref<Account>, fallible return type, top-level non-function decls, World param), which directly guided the fixes.",
+  "notes": "FINAL code guarantees balance>=0 via HAND-WRITTEN checks, not the type system or a verified contract. The default `zero run` target is the direct AArch64 ELF backend MVP, which (per repeated BLD004 diagnostics) supports ONLY function declarations over primitives: it rejected shapes (`type Account`), `ref`/`mutref` shape params, `choice`/custom-error types, user-side `Maybe` construction, fallible (`raises [E]`) functions with non-Void return types, top-level `const`, and passing `World` into helper functions. So idiomatic approaches (a `type Account` mutated via `mutref`, or a `choice OpResult`, or `Maybe<i64>`, or `raises [Invalid,Insufficient]`) all COMPILE-CHECK (languageOk:true) but FAIL backend buildability. The working design reduces the account to a plain i64 balance; deposit/withdraw are pure functions returning the new balance or the sentinel -1 (a valid balance is always >=0, so -1 unambiguously means rejected); a single `applyResult` helper keeps the prior balance on any negative result, which is the one place the never-negative invariant is enforced by hand. No language/compiler mechanism guarantees the invariant.",
+  "attempts": [
+    {"attempt": 1, "pass_count": 0, "failed_cases": ["compile: PAR100 expected expression before object literal at the `rescue ... err { }` block form; the guide only documents `rescue expr err <expr>` (expression form), not a rescue block"]},
+    {"attempt": 2, "pass_count": 0, "failed_cases": ["compile: cascade of language fixes -- TYP009 (assign through mutref<i32> scalar binding), ERR003 (fallible `report` call needs `check`), PAR100 (single-line `if {stmt}` and inline `check` in expression); resolved to languageOk:true but then BLD004: direct backend does not support `ref<Account>` parameter type"]},
+    {"attempt": 3, "pass_count": 0, "failed_cases": ["languageOk:true but BLD004: direct backend fallible return type unsupported (a `raises [Invalid]` function returning i64); confirmed by probe that even the official guide's `fn f(i:i32)->i32 raises [Odd]` example does not build on this backend"]},
+    {"attempt": 4, "pass_count": 0, "failed_cases": ["BLD004: top-level `const` not a function declaration; then after inlining, BLD004: passing `World` into the `report` helper unsupported"]},
+    {"attempt": 5, "pass_count": 14, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "PAR100: expected expression before object literal | line 91 | expected: expression actual: { | help: use canonical .0 text source",
+    "TYP009: cannot assign through immutable binding | line 45 | expected: binding declared with var | help: change let to var before assigning through it",
+    "ERR003: fallible function call must be checked | line 62 | actual: call to 'report' | help: prefix the call with check in a function marked with `raises`",
+    "BLD004: direct backend parameter type is unsupported | line 14 | expected: direct AArch64 ELF object subset actual: ref<Account> | backendBlocker.unsupportedFeature: ref<Account>",
+    "BLD004: direct backend fallible return type is unsupported | line 13 | actual: i64 (function marked raises [Invalid])",
+    "BLD004: direct AArch64 buildability does not support this instruction yet | probe_raises.0:5 (raise Odd from the guide's own raises-value example)",
+    "BLD004: direct backend MVP does not support declarations other than functions | actual: unsupported top-level declaration (choice/type/const)",
+    "BLD004: direct backend call parameter type is unsupported | line 56 | actual: World (passing World into a helper function)"
+  ],
+  "toolchain_notes": "zero 0.2.1, host target linux-arm64 (direct AArch64 ELF backend MVP, the default for `zero run`). Guide fetch that worked (bare skill ids; prefixed names not needed): docker run --rm ai-lang-bench bash -lc 'zero skills get language; zero skills get diagnostics; zero skills get stdlib' -- all three returned successfully. Check/run: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem2-bank-account/results/Zero/B ai-lang-bench bash -lc 'zero check --json attempt_5.0 && zero run attempt_5.0'. Bare-file `zero run <file.0>` is supported (no package scaffold needed); a .zero/ build cache dir is created in the working directory. Diagnostics triaged with `zero explain <code>` and `zero targets`.",
+  "self_recovered_normalized": true
+}

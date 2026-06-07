@@ -1,0 +1,240 @@
+# Bank account (problem2) — NanoLang, Pattern B
+# Model: an account is an immutable struct holding a non-negative balance.
+# deposit/withdraw return Result<Account, string>:
+#   - Ok(new account) on success
+#   - Err(message) on a rejected operation; the caller keeps the OLD account,
+#     so on error the balance is structurally left unchanged.
+# Amounts must be positive integers (<= 0 rejected). Withdrawals exceeding the
+# balance are rejected. Balance is always >= 0 by construction.
+
+from "modules/std/result.nano" import Result
+
+struct Account {
+    balance: int
+}
+
+# Construct a fresh account with balance 0.
+fn new_account() -> Account {
+    return Account { balance: 0 }
+}
+
+shadow new_account {
+    assert (== (new_account).balance 0)
+}
+
+# Read the current balance.
+fn balance(acc: Account) -> int {
+    return acc.balance
+}
+
+shadow balance {
+    assert (== (balance (new_account)) 0)
+    assert (== (balance Account { balance: 42 }) 42)
+}
+
+# Deposit a positive integer amount.
+fn deposit(acc: Account, amount: int) -> Result<Account, string> {
+    if (<= amount 0) {
+        return Result.Err { error: "deposit amount must be a positive integer" }
+    }
+    return Result.Ok { value: Account { balance: (+ acc.balance amount) } }
+}
+
+shadow deposit {
+    let a: Account = (new_account)
+
+    let r1: Result<Account, string> = (deposit a 100)
+    match r1 {
+        Ok(v) => { assert (== v.value.balance 100) }
+        Err(e) => { assert false }
+    }
+
+    # zero rejected, original unchanged
+    let r2: Result<Account, string> = (deposit a 0)
+    match r2 {
+        Ok(v) => { assert false }
+        Err(e) => { assert true }
+    }
+    assert (== a.balance 0)
+
+    # negative rejected
+    let r3: Result<Account, string> = (deposit a -50)
+    match r3 {
+        Ok(v) => { assert false }
+        Err(e) => { assert true }
+    }
+}
+
+# Withdraw a positive integer amount not exceeding the balance.
+fn withdraw(acc: Account, amount: int) -> Result<Account, string> {
+    if (<= amount 0) {
+        return Result.Err { error: "withdraw amount must be a positive integer" }
+    }
+    if (> amount acc.balance) {
+        return Result.Err { error: "insufficient funds" }
+    }
+    return Result.Ok { value: Account { balance: (- acc.balance amount) } }
+}
+
+shadow withdraw {
+    let a: Account = Account { balance: 100 }
+
+    let r1: Result<Account, string> = (withdraw a 30)
+    match r1 {
+        Ok(v) => { assert (== v.value.balance 70) }
+        Err(e) => { assert false }
+    }
+
+    # exceeding balance rejected, original unchanged
+    let r2: Result<Account, string> = (withdraw a 101)
+    match r2 {
+        Ok(v) => { assert false }
+        Err(e) => { assert true }
+    }
+    assert (== a.balance 100)
+
+    # non-positive rejected
+    let r3: Result<Account, string> = (withdraw a 0)
+    match r3 {
+        Ok(v) => { assert false }
+        Err(e) => { assert true }
+    }
+    let r4: Result<Account, string> = (withdraw a -50)
+    match r4 {
+        Ok(v) => { assert false }
+        Err(e) => { assert true }
+    }
+}
+
+# ----- Test harness: the 14 spec cases, aggregated as "PASS N/14" -----
+
+# Helper: unwrap an Ok account, or return the original on Err.
+fn apply_or_keep(acc: Account, r: Result<Account, string>) -> Account {
+    match r {
+        Ok(v) => { return v.value }
+        Err(e) => { return acc }
+    }
+}
+
+shadow apply_or_keep {
+    let a: Account = (new_account)
+    let kept: Account = (apply_or_keep a (deposit a 0))
+    assert (== kept.balance 0)
+    let grown: Account = (apply_or_keep a (deposit a 5))
+    assert (== grown.balance 5)
+}
+
+# Returns true if the result is an error.
+fn is_error(r: Result<Account, string>) -> bool {
+    match r {
+        Ok(v) => { return false }
+        Err(e) => { return true }
+    }
+}
+
+shadow is_error {
+    let a: Account = (new_account)
+    assert (is_error (deposit a 0))
+    assert (not (is_error (deposit a 1)))
+}
+
+fn run_tests() -> int {
+    let mut pass: int = 0
+
+    # --- SUCCESS cases: check final balance ---
+
+    # 1: fresh => 0
+    let a1: Account = (new_account)
+    if (== (balance a1) 0) { set pass (+ pass 1) }
+
+    # 2: dep 100 => 100
+    let a2: Account = (apply_or_keep a1 (deposit a1 100))
+    if (== (balance a2) 100) { set pass (+ pass 1) }
+
+    # 3: dep 100, dep 50 => 150
+    let a3a: Account = (apply_or_keep (new_account) (deposit (new_account) 100))
+    let a3b: Account = (apply_or_keep a3a (deposit a3a 50))
+    if (== (balance a3b) 150) { set pass (+ pass 1) }
+
+    # 4: dep 100, wd 30 => 70
+    let a4a: Account = (apply_or_keep (new_account) (deposit (new_account) 100))
+    let a4b: Account = (apply_or_keep a4a (withdraw a4a 30))
+    if (== (balance a4b) 70) { set pass (+ pass 1) }
+
+    # 5: dep 100, wd 100 => 0
+    let a5a: Account = (apply_or_keep (new_account) (deposit (new_account) 100))
+    let a5b: Account = (apply_or_keep a5a (withdraw a5a 100))
+    if (== (balance a5b) 0) { set pass (+ pass 1) }
+
+    # 6: dep 50, dep 50, wd 80 => 20
+    let a6a: Account = (apply_or_keep (new_account) (deposit (new_account) 50))
+    let a6b: Account = (apply_or_keep a6a (deposit a6a 50))
+    let a6c: Account = (apply_or_keep a6b (withdraw a6b 80))
+    if (== (balance a6c) 20) { set pass (+ pass 1) }
+
+    # --- ERROR cases: rejected AND balance unchanged ---
+
+    # 7: fresh, wd 10 => rejected, 0
+    let e7: Account = (new_account)
+    let r7: Result<Account, string> = (withdraw e7 10)
+    if (and (is_error r7) (== (balance (apply_or_keep e7 r7)) 0)) { set pass (+ pass 1) }
+
+    # 8: dep 100, wd 101 => rejected, 100
+    let e8: Account = (apply_or_keep (new_account) (deposit (new_account) 100))
+    let r8: Result<Account, string> = (withdraw e8 101)
+    if (and (is_error r8) (== (balance (apply_or_keep e8 r8)) 100)) { set pass (+ pass 1) }
+
+    # 9: dep -50 => rejected, 0
+    let e9: Account = (new_account)
+    let r9: Result<Account, string> = (deposit e9 -50)
+    if (and (is_error r9) (== (balance (apply_or_keep e9 r9)) 0)) { set pass (+ pass 1) }
+
+    # 10: wd -50 => rejected, 0
+    let e10: Account = (new_account)
+    let r10: Result<Account, string> = (withdraw e10 -50)
+    if (and (is_error r10) (== (balance (apply_or_keep e10 r10)) 0)) { set pass (+ pass 1) }
+
+    # 11: dep 0 => rejected, 0
+    let e11: Account = (new_account)
+    let r11: Result<Account, string> = (deposit e11 0)
+    if (and (is_error r11) (== (balance (apply_or_keep e11 r11)) 0)) { set pass (+ pass 1) }
+
+    # 12: wd 0 => rejected, 0
+    let e12: Account = (new_account)
+    let r12: Result<Account, string> = (withdraw e12 0)
+    if (and (is_error r12) (== (balance (apply_or_keep e12 r12)) 0)) { set pass (+ pass 1) }
+
+    # --- INVARIANTS ---
+
+    # 13: balance never negative across a sequence of operations
+    let i13a: Account = (apply_or_keep (new_account) (deposit (new_account) 10))
+    let i13b: Account = (apply_or_keep i13a (withdraw i13a 5))
+    let i13c: Account = (apply_or_keep i13b (withdraw i13b 100))   # rejected
+    if (and (>= (balance i13a) 0) (and (>= (balance i13b) 0) (>= (balance i13c) 0))) {
+        set pass (+ pass 1)
+    }
+
+    # 14: every error case leaves balance unchanged (re-check 7-12 succinctly)
+    let base: Account = (apply_or_keep (new_account) (deposit (new_account) 100))
+    let unchanged: bool = (and
+        (== (balance (apply_or_keep base (withdraw base 999))) 100)
+        (and (== (balance (apply_or_keep base (deposit base 0))) 100)
+             (== (balance (apply_or_keep base (deposit base -1))) 100)))
+    if unchanged { set pass (+ pass 1) }
+
+    return pass
+}
+
+shadow run_tests {
+    assert (== (run_tests) 14)
+}
+
+fn main() -> int {
+    let n: int = (run_tests)
+    (println (+ "PASS " (+ (int_to_string n) "/14")))
+    return 0
+}
+
+shadow main {
+    assert (== (main) 0)
+}

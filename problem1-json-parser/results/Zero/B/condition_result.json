@@ -1,0 +1,27 @@
+{
+  "language": "Zero",
+  "condition": "B",
+  "status": "DONE",
+  "pass_at_1": false,
+  "fix_rounds": 1,
+  "final_pass_count": "22/22",
+  "loc": 542,
+  "tokens": 2179,
+  "self_recovered": true,
+  "error_quality": "good: structured codes (BOR002, BLD004, ERR003, PAR100) with line/column, expected/actual, help text, and repair hints",
+  "pass_basis": "normalized",
+  "notes": "Hand-written iterative explicit-stack JSON parser. Zero's direct backend rejects user `type` shapes at runtime and recursion through mutable-reference params (BOR002), so a classic recursive-descent tree build was impossible. Instead parseDocument is a single non-recursive state machine driven by an explicit container stack (MutSpan<u8>: 1=array,2=object) and a shared state span (st[0]=pos, st[1]=outlen, st[2]=error, st[3]=depth). It parses and simultaneously emits a CANONICAL NORMALIZED serialization (no insignificant whitespace; strings re-encoded with escapes for \" \\ and \\n) into an output MutSpan<u8>. Numbers are validated by hand (rejects leading zeros, bare leading dot, trailing dot; requires a digit after the dot). Strings validated for termination and only the three required escapes. Trailing content after the top-level value is rejected. Errors set a flag and return false (never crash). Comparison is std.mem.eql between the produced normalized bytes and the expected normalized string, hence pass_basis=normalized. All output happens in main because the direct backend forbids passing World to helpers.",
+  "attempts": [
+    {"attempt": 1, "pass_count": 0, "failed_cases": ["BOR002 compile failure: recursion through mutable-reference params (parseValue<->parseArray/parseObject) not verifiable; program never ran"]},
+    {"attempt": 2, "pass_count": 22, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "attempt_1.0:209:19 BOR002: cannot verify provenance effects for mutable parameter call -- expected 'complete provenance summary', actual 'recursive or incomplete mutable parameter summary'; help: simplify the call cycle or keep reference-storing mutable calls non-recursive",
+    "ERR003: fallible function call must be checked -- call to 'runNormal' (helpers calling world.out.write are `raises`, so `if check runNormal(...)` required)",
+    "BLD004: direct backend call parameter type is unsupported -- actual 'World' (World cannot be passed to helper functions; all I/O must stay in main)",
+    "attempt_2.0:380:52 PAR100: expected operator between expressions -- actual 'passed' (two statements on one line inside `if {}` are not allowed; each statement needs its own line)",
+    "probe BLD004: direct backend local type is unsupported -- actual 'Parser' (user `type` shapes unsupported by the AArch64 direct backend at runtime)"
+  ],
+  "toolchain_notes": "zero 0.2.1 (native bootstrap, host linux-arm64). Guide fetch (Pattern B) cmd that worked: docker run --rm ai-lang-bench bash -lc 'zero skills get language; echo ===; zero skills get diagnostics; echo ===; zero skills get stdlib' -- all three skill ids (language/diagnostics/stdlib, unprefixed) returned content successfully. Build/run cmd: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem1-json-parser/results/Zero/B ai-lang-bench bash -lc 'zero check attempt_2.0 && zero run attempt_2.0'. No scaffold/zero.json needed; single .0 file built and ran directly via the direct backend. zero check passes language layer separately from targetReadiness; BLD004/BOR002 surface in targetReadiness/borrow phases. Note: `zero test` interpreter is very limited (rejects while loops and function calls), and `zero run` direct backend rejects user `type` shapes and World-passing helpers and mutual recursion through mutable params -- these constraints shaped the iterative design.",
+  "self_recovered_normalized": true
+}

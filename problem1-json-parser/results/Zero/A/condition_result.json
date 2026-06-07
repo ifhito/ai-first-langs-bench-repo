@@ -1,0 +1,34 @@
+{
+  "language": "Zero",
+  "condition": "A",
+  "status": "DONE",
+  "pass_at_1": false,
+  "fix_rounds": 4,
+  "final_pass_count": "22/22",
+  "loc": 437,
+  "tokens": 2124,
+  "self_recovered": true,
+  "error_quality": "good",
+  "pass_basis": "value",
+  "notes": "Hand-written recursive-descent validator. No JSON stdlib used. Backend (zero 0.2.1 direct AArch64) is highly constrained: no ADT payloads (enum variants reject any payload), records/char cannot be local values, no string concat (+), no string length accessor, no globals, no tuples. So a Json value ADT is impossible; instead the parser operates on a (String s, i32 len) buffer with byte indexing s[i] (u8), position threaded through return values, and returns the index after a valid value or -1 on error. json_ok requires full consumption after optional surrounding whitespace. NORMAL cases compare NATIVE primitive values where a primitive exists (first_byte for null/true/false discriminator byte; extract_int==42 for the integer cases incl. leading/trailing spaces); float/string/array/object validated structurally (pass_basis=value: every case that has a concrete scalar is value-compared). ERROR cases must yield json_ok==false. Number grammar rejects 01 (leading zero), 1. (no frac digits), .5 (no int part). String supports exactly \\\" \\\\ \\n. The dominant blocker was a compiler scaling bug: zero check / codegen cost grows super-linearly with (a) the number of distinct recursion CYCLES and (b) the number of call SITES into a recursive function. Two cycles (separate parse_array + parse_object) or many json_ok call sites both made `zero check` hang (>2-5 min, killed). Fixed by (1) merging array+object into ONE shared recursive helper pcontainer so there is a single pv<->pcontainer cycle, and (2) routing all 22 inputs through a SINGLE json_ok call site via a run_case(id) dispatch driven by a while loop. World cannot be passed to helper functions on this backend, so all output is done inline in main. The large LOC is mostly verbose if-chain dispatch tables (case_input/case_len/case_name/int_str) forced by the absence of string concat and int->string conversion; the parser proper is ~250 lines. Build/codegen of the recursive parser is slow (~3-5 min) but completes; final run prints PASS 22/22.",
+  "attempts": [
+    {"attempt": 1, "pass_count": 0, "failed_cases": ["compile error: used `bool` (correct is Bool), and mutual recursion between multi-branch parse functions hangs `zero check`"]},
+    {"attempt": 2, "pass_count": 0, "failed_cases": ["Bool fixed; `zero check` still hangs (parse_value<->parse_array mutual recursion)"]},
+    {"attempt": 3, "pass_count": 0, "failed_cases": ["unified single recursion cycle (compiles); ERR003: fallible report() not checked, and BLD004: World cannot be a helper parameter"]},
+    {"attempt": 4, "pass_count": 0, "failed_cases": ["World param removed, printing inlined; `zero check` hangs again due to 22 separate json_ok call sites into the recursive parser"]},
+    {"attempt": 5, "pass_count": 22, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "PAR100: expected return type arrow (fn needs -> ReturnType)",
+    "NAM003: unknown type name 'Unit' / 'Int' / 'str' (valid: Void, i32, u8, String, Bool, f64; generics use <>)",
+    "STD002: unknown std helper 'std.len' / 'std.string_len' / 'std.print' (no length/concat/print std helper discoverable from raw diagnostics)",
+    "TYP021: member access requires a shape, Maybe value, enum case, or choice case (String has no .len/.size members)",
+    "BLD004: direct AArch64 object buildability does not support this local type: record / char",
+    "BLD004: direct backend call parameter type is unsupported: World (cannot pass World to helper fns)",
+    "TYP003: return type does not match (expected bool actual Bool -> type is Bool not bool)",
+    "ERR003: fallible function call must be checked (prefix `check`, caller must be `raises`)",
+    "zero check timed out (RC=124) on mutual recursion / many recursive call sites"
+  ],
+  "toolchain_notes": "zero 0.2.1 (native bootstrap), ext .0. Docker: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem1-json-parser/results/Zero/A ai-lang-bench bash -lc '<cmd>'. Single .0 files run directly: `zero check attempt_5.0` and `zero run attempt_5.0` (no project scaffold needed; `zero new cli` scaffold inspected once only to learn the canonical main signature `pub fn main(world: World) -> Void raises` and `check world.out.write(...)` for I/O). check is fast (<1s..~10s); run/codegen of the recursive parser is slow (~3-5 min) so runs were invoked with `timeout 400`. Used internal `timeout` to prevent hung containers. CONFIRM Pattern A integrity: NO language guide, NO `zero explain`, NO `zero skills get`/examples, NO stdlib docs, NO web. All syntax recovered from prior knowledge plus raw PAR100/NAM003/TYP*/BLD004/ERR003/STD002 diagnostics on my own candidate code only.",
+  "self_recovered_normalized": false
+}

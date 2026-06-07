@@ -1,0 +1,107 @@
+// Bank account in Vera (Pattern A: syntax recovered from compiler diagnostics).
+//
+// Model:
+//   * A balance is a non-negative integer (Int).
+//   * deposit / withdraw return an Outcome: Ok(newBalance) on success, Err on a
+//     rejected operation. Rejection leaves the balance untouched (the caller keeps
+//     the previous value via `settle`), so the balance is never left invalid.
+//   * `settle` carries the post-Result-verified guarantee balance >= 0.
+
+public data Outcome { Ok(Int), Err }
+
+// deposit(balance, amount): amount must be a positive integer.
+public fn deposit(@Int, @Int -> @Outcome)
+  requires(@Int.1 >= 0)
+  ensures(true)
+  effects(pure)
+{
+  if @Int.0 > 0 then {
+    Ok(@Int.1 + @Int.0)
+  } else {
+    Err
+  }
+}
+
+// withdraw(balance, amount): amount positive and not exceeding balance.
+public fn withdraw(@Int, @Int -> @Outcome)
+  requires(@Int.1 >= 0)
+  ensures(true)
+  effects(pure)
+{
+  if @Int.0 > 0 && @Int.0 <= @Int.1 then {
+    Ok(@Int.1 - @Int.0)
+  } else {
+    Err
+  }
+}
+
+// settle(balance, outcome) -> new balance.
+// Ok -> the new value; Err -> the old balance (unchanged).
+// The contract proves the resulting balance is always non-negative.
+public fn settle(@Int, @Outcome -> @Int)
+  requires(@Int.0 >= 0)
+  ensures(@Int.result >= 0)
+  effects(pure)
+{
+  match @Outcome.0 {
+    Ok(@Int) -> @Int.0,
+    Err -> @Int.1
+  }
+}
+
+// is_err(outcome) -> 1 if rejected, else 0.
+public fn is_err(@Outcome -> @Int)
+  requires(true)
+  ensures(@Int.result >= 0)
+  effects(pure)
+{
+  match @Outcome.0 {
+    Ok(@Int) -> 0,
+    Err -> 1
+  }
+}
+
+// eq(a, b) -> 1 if equal else 0.
+public fn eq(@Int, @Int -> @Int)
+  requires(true)
+  ensures(@Int.result >= 0)
+  effects(pure)
+{
+  if @Int.0 == @Int.1 then { 1 } else { 0 }
+}
+
+public fn check(@String, @Int, @Int -> @Int)
+  requires(true)
+  ensures(@Int.result >= 0)
+  effects(<IO>)
+{
+  IO.print(@String.0);
+  if @Int.1 == @Int.0 then {
+    IO.print("  PASS");
+    1
+  } else {
+    IO.print("  FAIL");
+    0
+  }
+}
+
+public fn main(@Unit -> @Unit)
+  requires(true)
+  ensures(true)
+  effects(<IO>)
+{
+  // ----- SUCCESS cases (compare final balance) -----
+  // Case 1: fresh => 0
+  let @Int = settle(0, Ok(0));
+  let @Int = check("case1 dep nothing => 0", @Int.0, 0);
+
+  // Case 2: dep 100 => 100
+  let @Int = settle(0, deposit(0, 100));
+  let @Int = check("case2 dep100 => 100", @Int.0, 100);
+
+  // Case 3: dep100, dep50 => 150
+  let @Int = settle(settle(0, deposit(0, 100)), deposit(settle(0, deposit(0, 100)), 50));
+  let @Int = check("case3 dep100 dep50 => 150", @Int.0, 150);
+
+  IO.print("done")
+}

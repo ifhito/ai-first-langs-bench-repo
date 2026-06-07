@@ -1,0 +1,437 @@
+// JSON parser by hand (recursive descent), Zero (zerolang) v0.2.1.
+// Constraints discovered via raw diagnostics on own code:
+//   - no ADT payloads, no record/char locals, no string concat,
+//   - no string length accessor, no globals, no tuples;
+//   - the checker/codegen cost is super-linear in the number of distinct
+//     recursion CYCLES, so arrays and objects are handled by ONE shared
+//     recursive helper (pcontainer) giving a single pv<->pcontainer cycle.
+// Buffer = (String s, i32 len); position threaded via return value.
+// pv(s,len,i) -> index after a valid value, or -1 on error.
+
+fn is_ws(b: u8) -> Bool {
+  return b == 32 || b == 9 || b == 10 || b == 13
+}
+
+fn is_digit(b: u8) -> Bool {
+  return b >= 48 && b <= 57
+}
+
+fn skip_ws(s: String, len: i32, i: i32) -> i32 {
+  var j: i32 = i
+  while j < len {
+    if is_ws(s[j]) {
+      j = j + 1
+    } else {
+      return j
+    }
+  }
+  return j
+}
+
+// integer part end: 0 | [1-9][0-9]*  (i already past optional minus)
+fn int_end(s: String, len: i32, i: i32) -> i32 {
+  var j: i32 = i
+  if j >= len {
+    return -1
+  }
+  if s[j] == 48 {
+    j = j + 1
+    if j < len {
+      if is_digit(s[j]) {
+        return -1
+      }
+    }
+    return j
+  }
+  if is_digit(s[j]) == false {
+    return -1
+  }
+  while j < len {
+    if is_digit(s[j]) {
+      j = j + 1
+    } else {
+      return j
+    }
+  }
+  return j
+}
+
+// number: -? int frac?   frac = . [0-9]+   (rejects 01, 1., .5)
+fn parse_number(s: String, len: i32, i: i32) -> i32 {
+  var k: i32 = i
+  if k < len {
+    if s[k] == 45 {
+      k = k + 1
+    }
+  }
+  let ie: i32 = int_end(s, len, k)
+  if ie < 0 {
+    return -1
+  }
+  var j: i32 = ie
+  if j < len {
+    if s[j] == 46 {
+      j = j + 1
+      if j >= len {
+        return -1
+      }
+      if is_digit(s[j]) == false {
+        return -1
+      }
+      while j < len {
+        if is_digit(s[j]) {
+          j = j + 1
+        } else {
+          return j
+        }
+      }
+      return j
+    }
+  }
+  return j
+}
+
+// string: opening quote at i. escapes: \" \\ \n only.
+fn parse_string(s: String, len: i32, i: i32) -> i32 {
+  var j: i32 = i
+  if j >= len {
+    return -1
+  }
+  if s[j] != 34 {
+    return -1
+  }
+  j = j + 1
+  while j < len {
+    let c: u8 = s[j]
+    if c == 34 {
+      return j + 1
+    }
+    if c == 92 {
+      j = j + 1
+      if j >= len {
+        return -1
+      }
+      let e: u8 = s[j]
+      if e == 34 || e == 92 || e == 110 {
+        j = j + 1
+      } else {
+        return -1
+      }
+    } else {
+      j = j + 1
+    }
+  }
+  return -1
+}
+
+// shared container parser (array '['..']' and object '{'..'}'): single
+// recursive call site into pv => exactly one recursion cycle.
+fn pcontainer(s: String, len: i32, i: i32) -> i32 {
+  let open: u8 = s[i]
+  var close: u8 = 93
+  var is_obj: Bool = false
+  if open == 123 {
+    close = 125
+    is_obj = true
+  }
+  var j: i32 = i + 1
+  j = skip_ws(s, len, j)
+  if j >= len {
+    return -1
+  }
+  if s[j] == close {
+    return j + 1
+  }
+  while j < len {
+    if is_obj {
+      j = skip_ws(s, len, j)
+      let ke: i32 = parse_string(s, len, j)
+      if ke < 0 {
+        return -1
+      }
+      j = skip_ws(s, len, ke)
+      if j >= len {
+        return -1
+      }
+      if s[j] != 58 {
+        return -1
+      }
+      j = j + 1
+    }
+    let e: i32 = pv(s, len, j)
+    if e < 0 {
+      return -1
+    }
+    j = skip_ws(s, len, e)
+    if j >= len {
+      return -1
+    }
+    if s[j] == close {
+      return j + 1
+    }
+    if s[j] == 44 {
+      j = j + 1
+    } else {
+      return -1
+    }
+  }
+  return -1
+}
+
+fn pv(s: String, len: i32, i: i32) -> i32 {
+  let k: i32 = skip_ws(s, len, i)
+  if k >= len {
+    return -1
+  }
+  let c: u8 = s[k]
+  if c == 34 {
+    return parse_string(s, len, k)
+  }
+  if c == 45 || is_digit(c) {
+    return parse_number(s, len, k)
+  }
+  if c == 91 || c == 123 {
+    return pcontainer(s, len, k)
+  }
+  if c == 110 {
+    if k + 4 > len {
+      return -1
+    }
+    if s[k + 1] == 117 && s[k + 2] == 108 && s[k + 3] == 108 {
+      return k + 4
+    }
+    return -1
+  }
+  if c == 116 {
+    if k + 4 > len {
+      return -1
+    }
+    if s[k + 1] == 114 && s[k + 2] == 117 && s[k + 3] == 101 {
+      return k + 4
+    }
+    return -1
+  }
+  if c == 102 {
+    if k + 5 > len {
+      return -1
+    }
+    if s[k + 1] == 97 && s[k + 2] == 108 && s[k + 3] == 115 && s[k + 4] == 101 {
+      return k + 5
+    }
+    return -1
+  }
+  return -1
+}
+
+// top level: one value, optional surrounding ws, full consumption.
+fn json_ok(s: String, len: i32) -> Bool {
+  if len == 0 {
+    return false
+  }
+  let e: i32 = pv(s, len, 0)
+  if e < 0 {
+    return false
+  }
+  let f: i32 = skip_ws(s, len, e)
+  return f == len
+}
+
+// ---- value extractors for native-value comparison (NORMAL cases) ----
+fn first_byte(s: String, len: i32) -> u8 {
+  let a: i32 = skip_ws(s, len, 0)
+  return s[a]
+}
+
+fn extract_int(s: String, len: i32) -> i32 {
+  var j: i32 = skip_ws(s, len, 0)
+  var neg: Bool = false
+  if j < len {
+    if s[j] == 45 {
+      neg = true
+      j = j + 1
+    }
+  }
+  var acc: i32 = 0
+  while j < len {
+    if is_digit(s[j]) {
+      acc = acc * 10 + ((s[j] as i32) - 48)
+      j = j + 1
+    } else {
+      j = len
+    }
+  }
+  if neg {
+    return 0 - acc
+  }
+  return acc
+}
+
+// ---- harness ----
+// All 22 inputs are routed through a SINGLE json_ok call site (run_case),
+// because the checker/codegen cost grows super-linearly with the number of
+// call sites into the recursive parser. World cannot be passed to helpers, so
+// all output happens inline in main.
+
+fn case_input(id: i32) -> String {
+  if id == 1 { return "null" }
+  if id == 2 { return "true" }
+  if id == 3 { return "false" }
+  if id == 4 { return "42" }
+  if id == 5 { return "3.14" }
+  if id == 6 { return "\"hello\"" }
+  if id == 7 { return "\"a\\\"b\"" }
+  if id == 8 { return "[]" }
+  if id == 9 { return "{}" }
+  if id == 10 { return "[1, 2, 3]" }
+  if id == 11 { return "{\"a\": 1, \"b\": true}" }
+  if id == 12 { return "{\"a\": [1, {\"b\": null}]}" }
+  if id == 13 { return " 42 " }
+  if id == 14 { return "" }
+  if id == 15 { return "[1, 2, ]" }
+  if id == 16 { return "[1, 2" }
+  if id == 17 { return "{\"a\": 1" }
+  if id == 18 { return "01" }
+  if id == 19 { return "1." }
+  if id == 20 { return ".5" }
+  if id == 21 { return "foo" }
+  if id == 22 { return "\"abc" }
+  return ""
+}
+
+fn case_len(id: i32) -> i32 {
+  if id == 1 { return 4 }
+  if id == 2 { return 4 }
+  if id == 3 { return 5 }
+  if id == 4 { return 2 }
+  if id == 5 { return 4 }
+  if id == 6 { return 7 }
+  if id == 7 { return 6 }
+  if id == 8 { return 2 }
+  if id == 9 { return 2 }
+  if id == 10 { return 9 }
+  if id == 11 { return 19 }
+  if id == 12 { return 23 }
+  if id == 13 { return 4 }
+  if id == 14 { return 0 }
+  if id == 15 { return 8 }
+  if id == 16 { return 5 }
+  if id == 17 { return 7 }
+  if id == 18 { return 2 }
+  if id == 19 { return 2 }
+  if id == 20 { return 2 }
+  if id == 21 { return 3 }
+  if id == 22 { return 4 }
+  return 0
+}
+
+fn case_name(id: i32) -> String {
+  if id == 1 { return "1 null" }
+  if id == 2 { return "2 true" }
+  if id == 3 { return "3 false" }
+  if id == 4 { return "4 int42" }
+  if id == 5 { return "5 float" }
+  if id == 6 { return "6 str" }
+  if id == 7 { return "7 esc-quote" }
+  if id == 8 { return "8 empty-arr" }
+  if id == 9 { return "9 empty-obj" }
+  if id == 10 { return "10 arr123" }
+  if id == 11 { return "11 obj" }
+  if id == 12 { return "12 nested" }
+  if id == 13 { return "13 spaced42" }
+  if id == 14 { return "14 empty" }
+  if id == 15 { return "15 trail-comma" }
+  if id == 16 { return "16 open-arr" }
+  if id == 17 { return "17 open-obj" }
+  if id == 18 { return "18 lead-zero" }
+  if id == 19 { return "19 dot-no-frac" }
+  if id == 20 { return "20 dot-lead" }
+  if id == 21 { return "21 bareword" }
+  if id == 22 { return "22 open-str" }
+  return "?"
+}
+
+// ids 1..13 are NORMAL (expect valid); 14..22 are ERROR (expect rejected)
+fn expect_valid(id: i32) -> Bool {
+  return id <= 13
+}
+
+// extra native-value assertions for cases where a primitive value is checked
+fn value_extra_ok(id: i32, s: String, n: i32) -> Bool {
+  if id == 1 {
+    return first_byte(s, n) == 110
+  }
+  if id == 2 {
+    return first_byte(s, n) == 116
+  }
+  if id == 3 {
+    return first_byte(s, n) == 102
+  }
+  if id == 4 {
+    return extract_int(s, n) == 42
+  }
+  if id == 13 {
+    return extract_int(s, n) == 42
+  }
+  return true
+}
+
+fn run_case(id: i32) -> Bool {
+  let s: String = case_input(id)
+  let n: i32 = case_len(id)
+  let v: Bool = json_ok(s, n)
+  if expect_valid(id) {
+    return v && value_extra_ok(id, s, n)
+  }
+  return v == false
+}
+
+fn pmark(ok: Bool) -> String {
+  if ok {
+    return "PASS "
+  }
+  return "FAIL "
+}
+
+pub fn main(world: World) -> Void raises {
+  var pass: i32 = 0
+  var id: i32 = 1
+  while id <= 22 {
+    let ok: Bool = run_case(id)
+    check world.out.write(pmark(ok))
+    check world.out.write(case_name(id))
+    check world.out.write("\n")
+    if ok {
+      pass = pass + 1
+    }
+    id = id + 1
+  }
+  check world.out.write("PASS ")
+  check world.out.write(int_str(pass))
+  check world.out.write("/22\n")
+}
+
+fn int_str(n: i32) -> String {
+  if n == 22 { return "22" }
+  if n == 21 { return "21" }
+  if n == 20 { return "20" }
+  if n == 19 { return "19" }
+  if n == 18 { return "18" }
+  if n == 17 { return "17" }
+  if n == 16 { return "16" }
+  if n == 15 { return "15" }
+  if n == 14 { return "14" }
+  if n == 13 { return "13" }
+  if n == 12 { return "12" }
+  if n == 11 { return "11" }
+  if n == 10 { return "10" }
+  if n == 9 { return "9" }
+  if n == 8 { return "8" }
+  if n == 7 { return "7" }
+  if n == 6 { return "6" }
+  if n == 5 { return "5" }
+  if n == 4 { return "4" }
+  if n == 3 { return "3" }
+  if n == 2 { return "2" }
+  if n == 1 { return "1" }
+  return "0"
+}

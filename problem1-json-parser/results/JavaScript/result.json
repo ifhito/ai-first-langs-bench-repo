@@ -1,0 +1,29 @@
+{
+  "language": "JavaScript",
+  "conditions": {
+    "A": {
+      "status": "DONE",
+      "pass_at_1": true,
+      "fix_rounds": 0,
+      "final_pass_count": "22/22",
+      "loc": 171,
+      "tokens": 622,
+      "self_recovered": false,
+      "error_quality": "poor - no errors occurred; passed 22/22 on first run so no toolchain error output was needed to drive any fix.",
+      "notes": "Hand-written recursive-descent parser throwing Error on invalid input. Pattern A (spec only, no guide). All 22 cases passed on the first attempt including leading-zero (01), trailing-dot (1.), leading-dot (.5), trailing comma, unterminated string/bracket, and whitespace-trimmed top-level value.",
+      "attempts": [
+        {
+          "attempt": 1,
+          "pass_count": 22,
+          "failed_cases": []
+        }
+      ],
+      "raw_error_excerpts": [],
+      "toolchain_notes": "Wrote main.js + harness.js to host at results/JavaScript/A. Ran: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem1-json-parser/results/JavaScript/A ai-lang-bench node harness.js  -> output \"PASS 22/22\".",
+      "pass_basis": "value",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "node harness.js", "result": "PASS 22/22"}
+    }
+  },
+  "status": "DONE"
+}

@@ -1,0 +1,20 @@
+{
+  "language": "MoonBit",
+  "condition": "B",
+  "status": "DONE",
+  "pass_at_1": true,
+  "fix_rounds": 0,
+  "final_pass_count": "22/22",
+  "loc": 254,
+  "tokens": 802,
+  "self_recovered": false,
+  "error_quality": "structured ParseError with descriptive messages (e.g. 'leading zero', 'unterminated string'); never crashes",
+  "pass_basis": "value",
+  "notes": "Hand-written recursive-descent parser over an Array[Char] with a position cursor. JSON modeled as an ADT `enum Json { Null; Bool; Int; Float; Str; Arr; Obj }` deriving Eq, so the 13 normal cases are checked by native structural value equality (==). Numbers split int vs float by presence of '.', parsed via @strconv (no stdlib JSON used). Errors signaled via `type! ParseError`; the 9 error cases are caught with try?/Err without crashing. Top-level enforces no trailing characters, rejecting cases like trailing junk.",
+  "attempts": [
+    { "attempt": 1, "pass_count": 22, "failed_cases": [] }
+  ],
+  "raw_error_excerpts": [],
+  "toolchain_notes": "docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem1-json-parser/results/MoonBit/B ai-lang-bench bash -lc '<cmd>'. moon version: moon 0.1.20260529 (3e1c753 2026-05-29). Guide source: official llms.txt FETCH FAILED (https://docs.moonbitlang.com/llms.txt returned HTTP 404, also llms-full.txt 404) -> fell back to the toolchain itself as guide: `moon help`, a fresh `moon new` scaffold (moon.mod, moon.pkg `import { }` syntax, AGENTS.md conventions, *_wbtest.mbt whitebox tests), and raw `moon test` diagnostics. attempt_1 compiled and passed 22/22 immediately; the only fix-loop iterations were build-config corrections discovered via moon diagnostics: moon.pkg uses `import { ... }` (not JSON), and enum constructors needed `pub(all)` for the test (used a whitebox *_wbtest.mbt). These were pre-22/22 setup, no logic changes.",
+  "self_recovered_normalized": false
+}

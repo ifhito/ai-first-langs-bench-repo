@@ -1,0 +1,19 @@
+{
+  "language": "Python",
+  "condition": "A",
+  "status": "DONE",
+  "pass_at_1": true,
+  "fix_rounds": 0,
+  "final_pass_count": "14/14",
+  "loc": 35,
+  "tokens": 111,
+  "self_recovered": false,
+  "error_quality": "Custom BankAccountError with descriptive messages (positive integer / exceeds balance / must be integer).",
+  "notes": "balance>=0 is guaranteed by hand-written runtime checks, not by the type system or any verified contract. Python is dynamically typed with no static guarantees. _validate_amount rejects non-int (and bool) and amounts <=0 by raising BankAccountError; withdraw raises before mutating when amount > balance. Because the only mutation paths require a validated positive int and withdraw mutates only after the sufficiency check, the integer balance can never go below 0 and is never left in an invalid state on error (state is mutated only after all checks pass).",
+  "attempts": [
+    {"attempt": 1, "pass_count": 14, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [],
+  "toolchain_notes": "docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem2-bank-account/results/Python/A ai-lang-bench python3 run_tests.py ; Python 3.13.5",
+  "self_recovered_normalized": true
+}

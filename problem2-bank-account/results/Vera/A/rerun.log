@@ -1,0 +1,7 @@
+## condition: Vera/A
+## command: indir problem2-bank-account/results/Vera/A vera run attempt_5.vera
+## date(host): 2026-06-07T14:01:21Z
+----- stdout+stderr -----
+case01 fresh => 0case02 dep100 => 100case03 dep100 dep50 => 150case04 dep100 wd30 => 70case05 dep100 wd100 => 0case06 dep50 dep50 wd80 => 20case07 fresh wd10 rejected, stays 0case08 dep100 wd101 rejected, stays 100case09 dep(-50) rejected, stays 0case10 wd(-50) rejected, stays 0case11 dep(0) rejected, stays 0case12 wd(0) rejected, stays 0case13 invariant: balance never negativecase14 error leaves balance unchangedPASS14out of 14
+----- exit code -----
+0

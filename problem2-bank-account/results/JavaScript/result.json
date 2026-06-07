@@ -1,0 +1,22 @@
+{
+  "language": "JavaScript",
+  "conditions": {
+    "A": {
+      "status": "DONE",
+      "pass_at_1": true,
+      "fix_rounds": 0,
+      "final_pass_count": "14/14",
+      "loc": 57,
+      "tokens": 185,
+      "self_recovered": true,
+      "error_quality": "free - throws Error with descriptive messages; no error needed to drive a fix (pass@1).",
+      "notes": "Invariant enforcement = AI hand-written defensive checks. No type/contract mechanism. Private #balance; a #assertPositiveInteger helper throws before any mutation (Number.isInteger + <=0), and withdraw throws 'insufficient funds' before mutating. Check-before-mutate ordering keeps balance always >=0 and unchanged on error.",
+      "attempts": [{"attempt": 1, "pass_count": 14, "failed_cases": []}],
+      "raw_error_excerpts": [],
+      "toolchain_notes": "docker run --rm -v <repo>:/bench -w .../JavaScript/A ai-lang-bench node run_tests.js ; node v22.22.3.",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "node run_tests.js", "result": "PASS 14/14"}
+    }
+  },
+  "status": "DONE"
+}

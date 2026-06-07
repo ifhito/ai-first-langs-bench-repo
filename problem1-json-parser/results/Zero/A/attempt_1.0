@@ -1,0 +1,471 @@
+// JSON parser by hand (recursive descent), Zero (zerolang) v0.2.1.
+// Backend constraints discovered: no ADT payloads, no record/char locals,
+// no string concat, no string length accessor, no globals, no tuples.
+// Strategy: buffer = (String s, i32 len). Position threaded via return value.
+// Core structural parser pv(s,len,i) -> next index, or -1 on error.
+// Value checks for normal cases use dedicated extractor predicates.
+
+// ---- byte-class helpers ----
+fn is_ws(b: u8) -> Bool {
+  return b == 32 || b == 9 || b == 10 || b == 13
+}
+
+fn is_digit(b: u8) -> Bool {
+  return b >= 48 && b <= 57
+}
+
+fn skip_ws(s: String, len: i32, i: i32) -> i32 {
+  var j: i32 = i
+  while j < len {
+    if is_ws(s[j]) {
+      j = j + 1
+    } else {
+      return j
+    }
+  }
+  return j
+}
+
+// ---- number parsing ----
+// Grammar: -? int frac?  int = 0 | [1-9][0-9]*  frac = . [0-9]+
+// Returns end index after number, or -1 on error. Rejects 01, 1., .5
+fn parse_number(s: String, len: i32, i: i32) -> i32 {
+  // delegate to a clean implementation: optional minus, int part, opt frac
+  return parse_number_after_int(s, len, i, i)
+}
+
+// continuation kept separate to avoid the early-return-in-loop pitfall
+fn int_end(s: String, len: i32, i: i32) -> i32 {
+  // assumes a valid integer part starts at i (already minus-stripped caller)
+  var j: i32 = i
+  if j >= len {
+    return -1
+  }
+  if s[j] == 48 {
+    j = j + 1
+    if j < len {
+      if is_digit(s[j]) {
+        return -1
+      }
+    }
+    return j
+  }
+  if is_digit(s[j]) == false {
+    return -1
+  }
+  while j < len {
+    if is_digit(s[j]) {
+      j = j + 1
+    } else {
+      return j
+    }
+  }
+  return j
+}
+
+fn parse_number_after_int(s: String, len: i32, start: i32, jin: i32) -> i32 {
+  // recompute integer end robustly using int_end on minus-stripped position
+  var k: i32 = start
+  if k < len {
+    if s[k] == 45 {
+      k = k + 1
+    }
+  }
+  let ie: i32 = int_end(s, len, k)
+  if ie < 0 {
+    return -1
+  }
+  var j: i32 = ie
+  // optional fraction
+  if j < len {
+    if s[j] == 46 {
+      j = j + 1
+      // need at least one digit
+      if j >= len {
+        return -1
+      }
+      if is_digit(s[j]) == false {
+        return -1
+      }
+      while j < len {
+        if is_digit(s[j]) {
+          j = j + 1
+        } else {
+          return j
+        }
+      }
+      return j
+    }
+  }
+  return j
+}
+
+// ---- string parsing ----
+// Opening quote at i. Supports escapes \" \\ \n only. Returns index after
+// closing quote, or -1 on error.
+fn parse_string(s: String, len: i32, i: i32) -> i32 {
+  var j: i32 = i
+  if j >= len {
+    return -1
+  }
+  if s[j] != 34 {
+    return -1
+  }
+  j = j + 1
+  while j < len {
+    let c: u8 = s[j]
+    if c == 34 {
+      return j + 1
+    }
+    if c == 92 {
+      // escape: next must be " \ or n
+      j = j + 1
+      if j >= len {
+        return -1
+      }
+      let e: u8 = s[j]
+      if e == 34 || e == 92 || e == 110 {
+        j = j + 1
+      } else {
+        return -1
+      }
+    } else {
+      j = j + 1
+    }
+  }
+  return -1
+}
+
+// ---- literal matching ----
+fn match_lit(s: String, len: i32, i: i32, b0: u8, b1: u8, b2: u8, b3: u8, n: i32) -> i32 {
+  if i + n > len {
+    return -1
+  }
+  if n >= 1 {
+    if s[i] != b0 {
+      return -1
+    }
+  }
+  if n >= 2 {
+    if s[i + 1] != b1 {
+      return -1
+    }
+  }
+  if n >= 3 {
+    if s[i + 2] != b2 {
+      return -1
+    }
+  }
+  if n >= 4 {
+    if s[i + 3] != b3 {
+      return -1
+    }
+  }
+  return i + n
+}
+
+// ---- value parser (recursive) ----
+fn parse_value(s: String, len: i32, i: i32) -> i32 {
+  let k: i32 = skip_ws(s, len, i)
+  if k >= len {
+    return -1
+  }
+  let c: u8 = s[k]
+  if c == 110 {
+    // null
+    return match_lit(s, len, k, 110, 117, 108, 108, 4)
+  }
+  if c == 116 {
+    // true
+    return match_lit(s, len, k, 116, 114, 117, 101, 4)
+  }
+  if c == 102 {
+    // false
+    return parse_false(s, len, k)
+  }
+  if c == 34 {
+    return parse_string(s, len, k)
+  }
+  if c == 91 {
+    return parse_array(s, len, k)
+  }
+  if c == 123 {
+    return parse_object(s, len, k)
+  }
+  if c == 45 || is_digit(c) {
+    return parse_number(s, len, k)
+  }
+  return -1
+}
+
+fn parse_false(s: String, len: i32, i: i32) -> i32 {
+  // f a l s e  = 102 97 108 115 101
+  if i + 5 > len {
+    return -1
+  }
+  if s[i] != 102 {
+    return -1
+  }
+  if s[i + 1] != 97 {
+    return -1
+  }
+  if s[i + 2] != 108 {
+    return -1
+  }
+  if s[i + 3] != 115 {
+    return -1
+  }
+  if s[i + 4] != 101 {
+    return -1
+  }
+  return i + 5
+}
+
+fn parse_array(s: String, len: i32, i: i32) -> i32 {
+  // assumes s[i] == '['
+  var j: i32 = i + 1
+  j = skip_ws(s, len, j)
+  if j >= len {
+    return -1
+  }
+  if s[j] == 93 {
+    return j + 1
+  }
+  while true {
+    let e: i32 = parse_value(s, len, j)
+    if e < 0 {
+      return -1
+    }
+    j = skip_ws(s, len, e)
+    if j >= len {
+      return -1
+    }
+    if s[j] == 93 {
+      return j + 1
+    }
+    if s[j] == 44 {
+      j = j + 1
+      j = skip_ws(s, len, j)
+      // a value must follow (reject trailing comma)
+    } else {
+      return -1
+    }
+  }
+  return -1
+}
+
+fn parse_object(s: String, len: i32, i: i32) -> i32 {
+  // assumes s[i] == '{'
+  var j: i32 = i + 1
+  j = skip_ws(s, len, j)
+  if j >= len {
+    return -1
+  }
+  if s[j] == 125 {
+    return j + 1
+  }
+  while true {
+    j = skip_ws(s, len, j)
+    if j >= len {
+      return -1
+    }
+    if s[j] != 34 {
+      return -1
+    }
+    let ke: i32 = parse_string(s, len, j)
+    if ke < 0 {
+      return -1
+    }
+    j = skip_ws(s, len, ke)
+    if j >= len {
+      return -1
+    }
+    if s[j] != 58 {
+      return -1
+    }
+    j = j + 1
+    let ve: i32 = parse_value(s, len, j)
+    if ve < 0 {
+      return -1
+    }
+    j = skip_ws(s, len, ve)
+    if j >= len {
+      return -1
+    }
+    if s[j] == 125 {
+      return j + 1
+    }
+    if s[j] == 44 {
+      j = j + 1
+    } else {
+      return -1
+    }
+  }
+  return -1
+}
+
+// Top-level: parse one value, allow surrounding whitespace, require full
+// consumption. Returns true if input is valid JSON (single value).
+fn json_ok(s: String, len: i32) -> Bool {
+  if len == 0 {
+    return false
+  }
+  let e: i32 = parse_value(s, len, 0)
+  if e < 0 {
+    return false
+  }
+  let f: i32 = skip_ws(s, len, e)
+  if f == len {
+    return true
+  }
+  return false
+}
+
+// ---- value extractors for NORMAL cases (native-value comparison) ----
+// integer value of a validated integer literal (no minus needed for tests)
+fn extract_int(s: String, len: i32) -> i32 {
+  let a: i32 = skip_ws(s, len, 0)
+  var j: i32 = a
+  var neg: Bool = false
+  if j < len {
+    if s[j] == 45 {
+      neg = true
+      j = j + 1
+    }
+  }
+  var acc: i32 = 0
+  while j < len {
+    if is_digit(s[j]) {
+      acc = acc * 10 + (i32_of(s[j]) - 48)
+      j = j + 1
+    } else {
+      j = len
+    }
+  }
+  if neg {
+    return 0 - acc
+  }
+  return acc
+}
+
+fn i32_of(b: u8) -> i32 {
+  return as_i32(b)
+}
+
+// cast u8 -> i32
+fn as_i32(b: u8) -> i32 {
+  var r: i32 = 0
+  var k: i32 = 0
+  // build value by counting (safe, avoids cast syntax uncertainty)
+  // b <= 255
+  r = bcast(b)
+  return r
+}
+
+fn bcast(b: u8) -> i32 {
+  return b as i32
+}
+
+// first non-ws byte
+fn first_byte(s: String, len: i32) -> u8 {
+  let a: i32 = skip_ws(s, len, 0)
+  return s[a]
+}
+
+// ---- test harness ----
+fn report(world: World, name: String, ok: Bool) -> i32 raises {
+  if ok {
+    check world.out.write("PASS ")
+  } else {
+    check world.out.write("FAIL ")
+  }
+  check world.out.write(name)
+  check world.out.write("\n")
+  if ok {
+    return 1
+  }
+  return 0
+}
+
+pub fn main(world: World) -> Void raises {
+  var pass: i32 = 0
+
+  // NORMAL cases (value checks where feasible)
+  // 1 null
+  pass = pass + report(world, "1 null", json_ok("null", 4) && first_byte("null", 4) == 110)
+  // 2 true
+  pass = pass + report(world, "2 true", json_ok("true", 4) && first_byte("true", 4) == 116)
+  // 3 false
+  pass = pass + report(world, "3 false", json_ok("false", 5) && first_byte("false", 5) == 102)
+  // 4 42 -> int 42
+  pass = pass + report(world, "4 42", json_ok("42", 2) && extract_int("42", 2) == 42)
+  // 5 3.14 -> float (validate as number; value check via digits)
+  pass = pass + report(world, "5 3.14", json_ok("3.14", 4))
+  // 6 "hello"
+  pass = pass + report(world, "6 hello", json_ok("\"hello\"", 7))
+  // 7 "a\"b"  (7 bytes: " a \ " b ")
+  pass = pass + report(world, "7 a-quote-b", json_ok("\"a\\\"b\"", 6))
+  // 8 []
+  pass = pass + report(world, "8 empty-arr", json_ok("[]", 2))
+  // 9 {}
+  pass = pass + report(world, "9 empty-obj", json_ok("{}", 2))
+  // 10 [1, 2, 3]
+  pass = pass + report(world, "10 arr123", json_ok("[1, 2, 3]", 9))
+  // 11 {"a": 1, "b": true}
+  pass = pass + report(world, "11 obj", json_ok("{\"a\": 1, \"b\": true}", 19))
+  // 12 {"a": [1, {"b": null}]}
+  pass = pass + report(world, "12 nested", json_ok("{\"a\": [1, {\"b\": null}]}", 23))
+  // 13 " 42 " -> int 42 with surrounding spaces
+  pass = pass + report(world, "13 spaced42", json_ok(" 42 ", 4) && extract_int(" 42 ", 4) == 42)
+
+  // ERROR cases (must be rejected)
+  // 14 empty
+  pass = pass + report(world, "14 empty", json_ok("", 0) == false)
+  // 15 [1, 2, ]
+  pass = pass + report(world, "15 trailing-comma", json_ok("[1, 2, ]", 8) == false)
+  // 16 [1, 2
+  pass = pass + report(world, "16 unterminated-arr", json_ok("[1, 2", 5) == false)
+  // 17 {"a": 1
+  pass = pass + report(world, "17 unterminated-obj", json_ok("{\"a\": 1", 7) == false)
+  // 18 01
+  pass = pass + report(world, "18 leading-zero", json_ok("01", 2) == false)
+  // 19 1.
+  pass = pass + report(world, "19 dot-no-frac", json_ok("1.", 2) == false)
+  // 20 .5
+  pass = pass + report(world, "20 dot-leading", json_ok(".5", 2) == false)
+  // 21 foo
+  pass = pass + report(world, "21 foo", json_ok("foo", 3) == false)
+  // 22 "abc
+  pass = pass + report(world, "22 unterminated-str", json_ok("\"abc", 4) == false)
+
+  check world.out.write("PASS ")
+  check world.out.write(int_str(pass))
+  check world.out.write("/22\n")
+}
+
+// minimal int->string for the summary (0..22)
+fn int_str(n: i32) -> String {
+  if n == 22 { return "22" }
+  if n == 21 { return "21" }
+  if n == 20 { return "20" }
+  if n == 19 { return "19" }
+  if n == 18 { return "18" }
+  if n == 17 { return "17" }
+  if n == 16 { return "16" }
+  if n == 15 { return "15" }
+  if n == 14 { return "14" }
+  if n == 13 { return "13" }
+  if n == 12 { return "12" }
+  if n == 11 { return "11" }
+  if n == 10 { return "10" }
+  if n == 9 { return "9" }
+  if n == 8 { return "8" }
+  if n == 7 { return "7" }
+  if n == 6 { return "6" }
+  if n == 5 { return "5" }
+  if n == 4 { return "4" }
+  if n == 3 { return "3" }
+  if n == 2 { return "2" }
+  if n == 1 { return "1" }
+  return "0"
+}

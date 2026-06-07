@@ -1,0 +1,23 @@
+{
+  "language": "NanoLang",
+  "condition": "B",
+  "status": "DONE",
+  "pass_at_1": false,
+  "fix_rounds": 1,
+  "final_pass_count": "14/14",
+  "loc": 245,
+  "tokens": 1274,
+  "self_recovered": true,
+  "error_quality": "Idiomatic: deposit/withdraw return Result<Account,string> with Ok{value} / Err{error}; rejection carries a descriptive message (e.g. 'insufficient funds', 'deposit amount must be a positive integer'). Caller pattern-matches; no exceptions.",
+  "notes": "Account is an immutable struct { balance: int }. deposit/withdraw are pure functions returning Result<Account,string>: Ok carries a NEW Account on success, Err carries a message and the caller retains the OLD Account, so on error the balance is structurally unchanged (no mutation path exists to corrupt it). balance>=0 is guaranteed by hand-written checks plus structure: withdraw rejects amount>balance before constructing the new account, and deposit/withdraw reject amount<=0, so a new Account is only ever built with a non-negative balance via (+) or (-) that cannot go below 0. NanoLang is statically typed and ran all shadow tests at compile/run time, but the >=0 invariant itself is enforced by explicit guards, not a language-level refinement type.",
+  "attempts": [
+    {"attempt": 1, "pass_count": 0, "failed_cases": ["ALL — module import failed before execution: \"Module file 'modules/std/result.nano' not found\" (stdlib path not resolvable from output cwd)"]},
+    {"attempt": 2, "pass_count": 14, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "attempt_1: Error at line 10, column 1: Module file 'modules/std/result.nano' not found / nano: module loading failed",
+    "attempt_2: Warning at line 118, column 5: Unused variable 'e' / Warning at line 134, column 5: Unused variable 'v' / Warning at line 134, column 5: Unused variable 'e' / PASS 14/14"
+  ],
+  "toolchain_notes": "Guide files read from bundled repo at /opt/nanolang: README.md, docs/QUICK_REFERENCE.md, docs/ERROR_HANDLING.md, docs/SHADOW_TESTS.md, examples/api_lessons/result_api.nano, examples/api_lessons/vector2d_api.nano, examples/language/nl_mutable.nano. Inspect cmd: docker run --rm ai-lang-bench bash -lc 'sed -n ...'. Run cmd: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem2-bank-account/results/NanoLang/B ai-lang-bench bash -lc 'nanolang attempt_N.nano'. Fix: result_api.nano showed `from \"modules/std/result.nano\" import Result`, but that path does not resolve from the output working directory; replaced the import with a local `union Result<T,E> { Ok{value:T}, Err{error:E} }` (verified user-defined generic unions work via a probe), making the program self-contained.",
+  "self_recovered_normalized": true
+}

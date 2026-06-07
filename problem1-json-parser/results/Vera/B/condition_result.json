@@ -1,0 +1,25 @@
+{
+  "language": "Vera",
+  "condition": "B",
+  "status": "DONE",
+  "pass_at_1": false,
+  "fix_rounds": 1,
+  "final_pass_count": "22/22",
+  "loc": 457,
+  "tokens": 1937,
+  "self_recovered": true,
+  "error_quality": "Excellent: natural-language diagnostics with error codes (E130 unresolved slot with valid-index range, E005/E006 parse errors), explicit fix hints, and a clear 'unsupported effect Diverge — skipped' message that pointed directly at the codegen limitation.",
+  "pass_basis": "normalized",
+  "notes": "Hand-written recursive-descent parser. Custom ADT JVal { JNull, JBool, JInt, JFloat, JStr, JArr(Array<JVal>), JObj(Array<Tuple<String,JVal>>) }. Index-threaded parsers return Result<Tuple<JVal,Nat>,String> (value + next index). skip_ws + top-level trailing-char check; numbers scanned by hand with strict rules (rejects leading zeros, '1.', '.5'); strings handle \\\" \\\\ \\n escapes; arrays/objects reject trailing commas and unterminated input. No standard JSON facilities (json_parse/json_stringify) used. Comparison is by canonical re-serialization (ser): each parsed value is serialized to a compact canonical JSON string and compared for equality with the expected canonical string -> pass_basis=normalized. Error cases pass when parse_json returns Err (no crash).",
+  "attempts": [
+    {"attempt": 1, "pass_count": 0, "failed_cases": ["all (program could not run: pure recursion modeled with effects(<Diverge>), which codegen does not support; multiple E130 slot-index errors fixed first)"]},
+    {"attempt": 2, "pass_count": 22, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "[E130] Cannot resolve @Array<JVal>.1: only 1 Array<JVal> binding(s) in scope (valid indices: 0..0).",
+    "Function 'parse_json' uses unsupported effect 'Diverge' — skipped. ... Only public functions are exported as WASM entry points.",
+    "[E005] Unexpected \"hello\" at this position. Expected one of: COMMA, LBRACE, ... (string literal inside \\(...) interpolation is not allowed)"
+  ],
+  "toolchain_notes": "vera 0.0.160 (Z3 bundled). Guide source that worked: cat /opt/vera/SKILL.md (the bundled repo SKILL.md; the curl https://veralang.dev/SKILL.md fallback path was part of the same one-liner and SKILL.md was served from /opt/vera). Docker: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem1-json-parser/results/Vera/B ai-lang-bench bash -lc '<cmd>'. Commands used: 'vera check attempt_N.vera' and 'vera run attempt_N.vera'. Key learning: Vera has no Diverge codegen support; pure recursive (incl. mutually/structurally recursive) functions must carry a decreases() clause and effects(pure) — a numeric measure like nat_to_int(string_length(src)) - nat_to_int(idx) for index recursion, or decreases(0) for structural tree recursion, is accepted by 'vera run' (the proof may fall to a Tier-3 runtime check but does not block codegen).",
+  "self_recovered_normalized": true
+}

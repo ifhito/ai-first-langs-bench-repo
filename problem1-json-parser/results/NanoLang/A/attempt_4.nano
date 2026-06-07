@@ -1,0 +1,737 @@
+// JSON parser in NanoLang (Pattern A: spec only).
+// Hand-written recursive descent. No stdlib JSON parser used.
+//
+// Value.kind: 0=null 1=bool 2=int 3=float 4=string 5=array 6=object 9=error
+
+struct Value {
+    kind: int,
+    bval: bool,
+    ival: int,
+    fval: float,
+    sval: string,
+    items: array<Value>,
+    keys: array<string>,
+}
+
+struct PR {
+    val: Value,
+    pos: int,
+    ok: bool,
+}
+
+fn err_value() -> Value {
+    let empty_items: array<Value> = []
+    let empty_keys: array<string> = []
+    let v: Value = Value { kind: 9, bval: false, ival: 0, fval: 0.0, sval: "", items: empty_items, keys: empty_keys }
+    return v
+}
+shadow err_value {
+    let v: Value = ((err_value))
+    let k: int = v.kind
+    assert (k == 9)
+}
+
+fn err_pr(p: int) -> PR {
+    let v: Value = ((err_value))
+    let r: PR = PR { val: v, pos: p, ok: false }
+    return r
+}
+shadow err_pr {
+    let r: PR = ((err_pr 0))
+    let ok: bool = r.ok
+    assert (ok == false)
+}
+
+fn ok_pr(v: Value, p: int) -> PR {
+    let r: PR = PR { val: v, pos: p, ok: true }
+    return r
+}
+shadow ok_pr {
+    let v: Value = ((err_value))
+    let r: PR = ((ok_pr v 3))
+    let p: int = r.pos
+    assert (p == 3)
+}
+
+fn wsp(c: int) -> bool {
+    let sp: bool = (c == 32)
+    let tab: bool = (c == 9)
+    let nl: bool = (c == 10)
+    let cr: bool = (c == 13)
+    let r: bool = (sp or tab or nl or cr)
+    return r
+}
+shadow wsp {
+    let r: bool = ((wsp 32))
+    assert (r == true)
+}
+
+fn digitp(c: int) -> bool {
+    let lo: bool = (c >= 48)
+    let hi: bool = (c <= 57)
+    let r: bool = (lo and hi)
+    return r
+}
+shadow digitp {
+    let r: bool = ((digitp 53))
+    assert (r == true)
+}
+
+fn skip_ws(s: string, pos: int) -> int {
+    let n: int = ((str_length s))
+    let mut i: int = pos
+    let mut go: bool = true
+    while go {
+        let cont: bool = (i < n)
+        if cont {
+            let c: int = ((char_at s i))
+            let w: bool = ((wsp c))
+            if w {
+                set i (i + 1)
+            } else {
+                set go false
+            }
+        } else {
+            set go false
+        }
+    }
+    return i
+}
+shadow skip_ws {
+    let i: int = ((skip_ws "  x" 0))
+    assert (i == 2)
+}
+
+// Parse a JSON value starting at pos (no leading whitespace skipping).
+fn parse_value(s: string, pos: int) -> PR {
+    let n: int = ((str_length s))
+    let atend: bool = (pos >= n)
+    if atend {
+        let r: PR = ((err_pr pos))
+        return r
+    }
+    let c: int = ((char_at s pos))
+    // string
+    let isq: bool = (c == 34)
+    if isq {
+        let r: PR = ((parse_string s pos))
+        return r
+    }
+    // array
+    let isarr: bool = (c == 91)
+    if isarr {
+        let r: PR = ((parse_array s pos))
+        return r
+    }
+    // object
+    let isobj: bool = (c == 123)
+    if isobj {
+        let r: PR = ((parse_object s pos))
+        return r
+    }
+    // number: digit or '-'
+    let isdig: bool = ((digitp c))
+    let isminus: bool = (c == 45)
+    let isnum: bool = (isdig or isminus)
+    if isnum {
+        let r: PR = ((parse_number s pos))
+        return r
+    }
+    // literals null/true/false
+    let r: PR = ((parse_literal s pos))
+    return r
+}
+shadow parse_value {
+    let r: PR = ((parse_value "null" 0))
+    let ok: bool = r.ok
+    assert (ok == true)
+}
+
+fn match_word(s: string, pos: int, word: string) -> bool {
+    let n: int = ((str_length s))
+    let wn: int = ((str_length word))
+    let endp: int = (pos + wn)
+    let fits: bool = (endp <= n)
+    if fits {
+        let mut i: int = 0
+        let mut good: bool = true
+        while (i < wn) {
+            let a: int = ((char_at s (pos + i)))
+            let b: int = ((char_at word i))
+            let eq: bool = (a == b)
+            if eq {
+                set i (i + 1)
+            } else {
+                set good false
+                set i wn
+            }
+        }
+        return good
+    }
+    return false
+}
+shadow match_word {
+    let r: bool = ((match_word "null" 0 "null"))
+    assert (r == true)
+}
+
+fn parse_literal(s: string, pos: int) -> PR {
+    let isnull: bool = ((match_word s pos "null"))
+    if isnull {
+        let empty_items: array<Value> = []
+        let empty_keys: array<string> = []
+        let v: Value = Value { kind: 0, bval: false, ival: 0, fval: 0.0, sval: "", items: empty_items, keys: empty_keys }
+        let r: PR = ((ok_pr v (pos + 4)))
+        return r
+    }
+    let istrue: bool = ((match_word s pos "true"))
+    if istrue {
+        let empty_items: array<Value> = []
+        let empty_keys: array<string> = []
+        let v: Value = Value { kind: 1, bval: true, ival: 0, fval: 0.0, sval: "", items: empty_items, keys: empty_keys }
+        let r: PR = ((ok_pr v (pos + 4)))
+        return r
+    }
+    let isfalse: bool = ((match_word s pos "false"))
+    if isfalse {
+        let empty_items: array<Value> = []
+        let empty_keys: array<string> = []
+        let v: Value = Value { kind: 1, bval: false, ival: 0, fval: 0.0, sval: "", items: empty_items, keys: empty_keys }
+        let r: PR = ((ok_pr v (pos + 5)))
+        return r
+    }
+    let r: PR = ((err_pr pos))
+    return r
+}
+shadow parse_literal {
+    let r: PR = ((parse_literal "true" 0))
+    let ok: bool = r.ok
+    assert (ok == true)
+}
+
+// Parse a string starting at the opening quote.
+fn parse_string(s: string, pos: int) -> PR {
+    let n: int = ((str_length s))
+    let mut i: int = (pos + 1)
+    let mut acc: string = ""
+    let mut done: bool = false
+    let mut failed: bool = false
+    while (i < n) {
+        let stop: bool = (done or failed)
+        if stop {
+            set i n
+        } else {
+            let c: int = ((char_at s i))
+            let isclose: bool = (c == 34)
+            let isesc: bool = (c == 92)
+            if isclose {
+                set done true
+                set i (i + 1)
+            } else {
+                if isesc {
+                    let inext: int = (i + 1)
+                    let hasnext: bool = (inext < n)
+                    if hasnext {
+                        let e: int = ((char_at s inext))
+                        let isquote: bool = (e == 34)
+                        let isbslash: bool = (e == 92)
+                        let isn: bool = (e == 110)
+                        if isquote {
+                            let piece: string = ((string_from_char 34))
+                            set acc acc + piece
+                            set i (i + 2)
+                        } else {
+                            if isbslash {
+                                let piece: string = ((string_from_char 92))
+                                set acc acc + piece
+                                set i (i + 2)
+                            } else {
+                                if isn {
+                                    let piece: string = ((string_from_char 10))
+                                    set acc acc + piece
+                                    set i (i + 2)
+                                } else {
+                                    set failed true
+                                }
+                            }
+                        }
+                    } else {
+                        set failed true
+                    }
+                } else {
+                    let piece: string = ((string_from_char c))
+                    set acc acc + piece
+                    set i (i + 1)
+                }
+            }
+        }
+    }
+    let bad: bool = (failed or (done == false))
+    if bad {
+        let r: PR = ((err_pr pos))
+        return r
+    }
+    let empty_items: array<Value> = []
+    let empty_keys: array<string> = []
+    let v: Value = Value { kind: 4, bval: false, ival: 0, fval: 0.0, sval: acc, items: empty_items, keys: empty_keys }
+    let r: PR = ((ok_pr v i))
+    return r
+}
+shadow parse_string {
+    let r: PR = ((parse_string "\"hi\"" 0))
+    let ok: bool = r.ok
+    assert (ok == true)
+}
+
+// Parse a number. Validates JSON number grammar for the cases in the spec.
+fn parse_number(s: string, pos: int) -> PR {
+    let n: int = ((str_length s))
+    let mut i: int = pos
+    let mut numstr: string = ""
+    let mut failed: bool = false
+    // optional minus
+    let c0: int = ((char_at s i))
+    let isminus: bool = (c0 == 45)
+    if isminus {
+        set numstr numstr + ((string_from_char 45))
+        set i (i + 1)
+    }
+    // integer part: must start with digit; no leading zero unless single 0
+    let havedig: bool = (i < n)
+    if havedig {
+        let d0: int = ((char_at s i))
+        let d0dig: bool = ((digitp d0))
+        if d0dig {
+            let iszero: bool = (d0 == 48)
+            set numstr numstr + ((string_from_char d0))
+            set i (i + 1)
+            if iszero {
+                // leading zero: next must NOT be a digit
+                let more: bool = (i < n)
+                if more {
+                    let d1: int = ((char_at s i))
+                    let d1dig: bool = ((digitp d1))
+                    if d1dig {
+                        set failed true
+                    } else {
+                        set failed false
+                    }
+                } else {
+                    set failed false
+                }
+            } else {
+                // consume remaining integer digits
+                let mut go: bool = true
+                while go {
+                    let more: bool = (i < n)
+                    if more {
+                        let dx: int = ((char_at s i))
+                        let dxdig: bool = ((digitp dx))
+                        if dxdig {
+                            set numstr numstr + ((string_from_char dx))
+                            set i (i + 1)
+                        } else {
+                            set go false
+                        }
+                    } else {
+                        set go false
+                    }
+                }
+            }
+        } else {
+            set failed true
+        }
+    } else {
+        set failed true
+    }
+    // optional fraction
+    let mut isfloat: bool = false
+    let hasdot: bool = (i < n)
+    if hasdot {
+        let cd: int = ((char_at s i))
+        let isdot: bool = (cd == 46)
+        if isdot {
+            set isfloat true
+            set numstr numstr + ((string_from_char 46))
+            set i (i + 1)
+            // need at least one digit after dot
+            let after: bool = (i < n)
+            if after {
+                let fd: int = ((char_at s i))
+                let fddig: bool = ((digitp fd))
+                if fddig {
+                    let mut go2: bool = true
+                    while go2 {
+                        let more2: bool = (i < n)
+                        if more2 {
+                            let dy: int = ((char_at s i))
+                            let dydig: bool = ((digitp dy))
+                            if dydig {
+                                set numstr numstr + ((string_from_char dy))
+                                set i (i + 1)
+                            } else {
+                                set go2 false
+                            }
+                        } else {
+                            set go2 false
+                        }
+                    }
+                } else {
+                    set failed true
+                }
+            } else {
+                set failed true
+            }
+        } else {
+            set isfloat false
+        }
+    }
+    if failed {
+        let r: PR = ((err_pr pos))
+        return r
+    }
+    let empty_items: array<Value> = []
+    let empty_keys: array<string> = []
+    if isfloat {
+        let fv: float = ((string_to_float numstr))
+        let v: Value = Value { kind: 3, bval: false, ival: 0, fval: fv, sval: "", items: empty_items, keys: empty_keys }
+        let r: PR = ((ok_pr v i))
+        return r
+    }
+    let iv: int = ((string_to_int numstr))
+    let v: Value = Value { kind: 2, bval: false, ival: iv, fval: 0.0, sval: "", items: empty_items, keys: empty_keys }
+    let r: PR = ((ok_pr v i))
+    return r
+}
+shadow parse_number {
+    let r: PR = ((parse_number "42" 0))
+    let iv: int = r.val.ival
+    assert (iv == 42)
+}
+
+fn parse_array(s: string, pos: int) -> PR {
+    let n: int = ((str_length s))
+    let mut i: int = (pos + 1)
+    let mut items: array<Value> = []
+    let mut failed: bool = false
+    let mut done: bool = false
+    set i ((skip_ws s i))
+    // empty array
+    let atclose: bool = (i < n)
+    if atclose {
+        let c: int = ((char_at s i))
+        let isclose: bool = (c == 93)
+        if isclose {
+            set done true
+            set i (i + 1)
+        } else {
+            set done false
+        }
+    } else {
+        set failed true
+    }
+    let mut loop: bool = (done == false)
+    if failed {
+        set loop false
+    }
+    while loop {
+        set i ((skip_ws s i))
+        let pr: PR = ((parse_value s i))
+        let prok: bool = pr.ok
+        if prok {
+            let pv: Value = pr.val
+            set items ((array_push items pv))
+            set i pr.pos
+            set i ((skip_ws s i))
+            let more: bool = (i < n)
+            if more {
+                let c2: int = ((char_at s i))
+                let iscomma: bool = (c2 == 44)
+                let isclose2: bool = (c2 == 93)
+                if iscomma {
+                    set i (i + 1)
+                    set loop true
+                } else {
+                    if isclose2 {
+                        set done true
+                        set i (i + 1)
+                        set loop false
+                    } else {
+                        set failed true
+                        set loop false
+                    }
+                }
+            } else {
+                set failed true
+                set loop false
+            }
+        } else {
+            set failed true
+            set loop false
+        }
+    }
+    let bad: bool = (failed or (done == false))
+    if bad {
+        let r: PR = ((err_pr pos))
+        return r
+    }
+    let empty_keys: array<string> = []
+    let v: Value = Value { kind: 5, bval: false, ival: 0, fval: 0.0, sval: "", items: items, keys: empty_keys }
+    let r: PR = ((ok_pr v i))
+    return r
+}
+shadow parse_array {
+    let r: PR = ((parse_array "[]" 0))
+    let ok: bool = r.ok
+    assert (ok == true)
+}
+
+fn parse_object(s: string, pos: int) -> PR {
+    let n: int = ((str_length s))
+    let mut i: int = (pos + 1)
+    let mut items: array<Value> = []
+    let mut keys: array<string> = []
+    let mut failed: bool = false
+    let mut done: bool = false
+    set i ((skip_ws s i))
+    let atclose: bool = (i < n)
+    if atclose {
+        let c: int = ((char_at s i))
+        let isclose: bool = (c == 125)
+        if isclose {
+            set done true
+            set i (i + 1)
+        } else {
+            set done false
+        }
+    } else {
+        set failed true
+    }
+    let mut loop: bool = (done == false)
+    if failed {
+        set loop false
+    }
+    while loop {
+        set i ((skip_ws s i))
+        // key must be a string
+        let kc: bool = (i < n)
+        if kc {
+            let qc: int = ((char_at s i))
+            let isq: bool = (qc == 34)
+            if isq {
+                let kpr: PR = ((parse_string s i))
+                let kok: bool = kpr.ok
+                if kok {
+                    let kv: Value = kpr.val
+                    let kstr: string = kv.sval
+                    set i kpr.pos
+                    set i ((skip_ws s i))
+                    // colon
+                    let cc: bool = (i < n)
+                    if cc {
+                        let col: int = ((char_at s i))
+                        let iscolon: bool = (col == 58)
+                        if iscolon {
+                            set i (i + 1)
+                            set i ((skip_ws s i))
+                            let vpr: PR = ((parse_value s i))
+                            let vok: bool = vpr.ok
+                            if vok {
+                                let vv: Value = vpr.val
+                                set keys ((array_push keys kstr))
+                                set items ((array_push items vv))
+                                set i vpr.pos
+                                set i ((skip_ws s i))
+                                let more: bool = (i < n)
+                                if more {
+                                    let c2: int = ((char_at s i))
+                                    let iscomma: bool = (c2 == 44)
+                                    let isclose2: bool = (c2 == 125)
+                                    if iscomma {
+                                        set i (i + 1)
+                                        set loop true
+                                    } else {
+                                        if isclose2 {
+                                            set done true
+                                            set i (i + 1)
+                                            set loop false
+                                        } else {
+                                            set failed true
+                                            set loop false
+                                        }
+                                    }
+                                } else {
+                                    set failed true
+                                    set loop false
+                                }
+                            } else {
+                                set failed true
+                                set loop false
+                            }
+                        } else {
+                            set failed true
+                            set loop false
+                        }
+                    } else {
+                        set failed true
+                        set loop false
+                    }
+                } else {
+                    set failed true
+                    set loop false
+                }
+            } else {
+                set failed true
+                set loop false
+            }
+        } else {
+            set failed true
+            set loop false
+        }
+    }
+    let bad: bool = (failed or (done == false))
+    if bad {
+        let r: PR = ((err_pr pos))
+        return r
+    }
+    let v: Value = Value { kind: 6, bval: false, ival: 0, fval: 0.0, sval: "", items: items, keys: keys }
+    let r: PR = ((ok_pr v i))
+    return r
+}
+shadow parse_object {
+    let r: PR = ((parse_object "{}" 0))
+    let ok: bool = r.ok
+    assert (ok == true)
+}
+
+// Top-level parse: trims surrounding whitespace, requires full consumption.
+fn parse(s: string) -> PR {
+    let start: int = ((skip_ws s 0))
+    let n: int = ((str_length s))
+    let empty: bool = (start >= n)
+    if empty {
+        let r: PR = ((err_pr 0))
+        return r
+    }
+    let pr: PR = ((parse_value s start))
+    let ok: bool = pr.ok
+    if ok {
+        let after: int = pr.pos
+        let after2: int = ((skip_ws s after))
+        let full: bool = (after2 == n)
+        if full {
+            return pr
+        }
+        let r: PR = ((err_pr after2))
+        return r
+    }
+    return pr
+}
+shadow parse {
+    let r: PR = ((parse "null"))
+    let ok: bool = r.ok
+    assert (ok == true)
+}
+
+// ---- Test harness: run all 22 cases ----
+
+fn check_ok(name: int, input: string, expectkind: int) -> int {
+    let r: PR = ((parse input))
+    let ok: bool = r.ok
+    if ok {
+        let v: Value = r.val
+        let k: int = v.kind
+        let kindok: bool = (k == expectkind)
+        if kindok {
+            return 1
+        }
+        return 0
+    }
+    return 0
+}
+shadow check_ok {
+    let r: int = ((check_ok 1 "null" 0))
+    assert (r == 1)
+}
+
+fn check_err(name: int, input: string) -> int {
+    let r: PR = ((parse input))
+    let ok: bool = r.ok
+    if ok {
+        return 0
+    }
+    return 1
+}
+shadow check_err {
+    let r: int = ((check_err 14 ""))
+    assert (r == 1)
+}
+
+fn report(name: int, pass: int) -> int {
+    let good: bool = (pass == 1)
+    if good {
+        let line: string = "PASS " + ((to_string name))
+        println line
+    } else {
+        let line: string = "FAIL " + ((to_string name))
+        println line
+    }
+    return pass
+}
+shadow report {
+    let r: int = ((report 1 1))
+    assert (r == 1)
+}
+
+fn main() -> int {
+    let mut total: int = 0
+    // success cases
+    let r1: int = ((check_ok 1 "null" 0))
+    set total total + ((report 1 r1))
+    let r2: int = ((check_ok 2 "true" 1))
+    set total total + ((report 2 r2))
+    let r3: int = ((check_ok 3 "false" 1))
+    set total total + ((report 3 r3))
+    let r4: int = ((check_ok 4 "42" 2))
+    set total total + ((report 4 r4))
+    let r5: int = ((check_ok 5 "3.14" 3))
+    set total total + ((report 5 r5))
+    let r6: int = ((check_ok 6 "\"hello\"" 4))
+    set total total + ((report 6 r6))
+    let r7: int = ((check_ok 7 "\"a\\\"b\"" 4))
+    set total total + ((report 7 r7))
+    let r8: int = ((check_ok 8 "[]" 5))
+    set total total + ((report 8 r8))
+    let r9: int = ((check_ok 9 "{}" 6))
+    set total total + ((report 9 r9))
+    let r10: int = ((check_ok 10 "[1, 2, 3]" 5))
+    set total total + ((report 10 r10))
+    let r11: int = ((check_ok 11 "{\"a\": 1, \"b\": true}" 6))
+    set total total + ((report 11 r11))
+    let r12: int = ((check_ok 12 "{\"a\": [1, {\"b\": null}]}" 6))
+    set total total + ((report 12 r12))
+    let r13: int = ((check_ok 13 " 42 " 2))
+    set total total + ((report 13 r13))
+    // error cases
+    let r14: int = ((check_err 14 ""))
+    set total total + ((report 14 r14))
+    let r15: int = ((check_err 15 "[1, 2, ]"))
+    set total total + ((report 15 r15))
+    let r16: int = ((check_err 16 "[1, 2"))
+    set total total + ((report 16 r16))
+    let r17: int = ((check_err 17 "{\"a\": 1"))
+    set total total + ((report 17 r17))
+    let r18: int = ((check_err 18 "01"))
+    set total total + ((report 18 r18))
+    let r19: int = ((check_err 19 "1."))
+    set total total + ((report 19 r19))
+    let r20: int = ((check_err 20 ".5"))
+    set total total + ((report 20 r20))
+    let r21: int = ((check_err 21 "foo"))
+    set total total + ((report 21 r21))
+    let r22: int = ((check_err 22 "\"abc"))
+    set total total + ((report 22 r22))
+    let summary: string = "TOTAL " + ((to_string total))
+    println summary
+    return 0
+}

@@ -1,0 +1,16 @@
+## condition: NanoLang/A_rerun
+## command: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem2-bank-account/results/NanoLang/A_rerun ai-lang-bench bash -lc 'nanolang attempt_1.nano'
+## date(host): 2026-06-07T14:31:42Z
+----- stdout+stderr -----
+Warning: Function 'deposit' is missing a shadow test
+Warning: Function 'withdraw' is missing a shadow test
+Warning at line 48, column 5: Unused variable 'o'
+Warning at line 48, column 5: Unused variable 'e'
+Warning: Function 'is_err' is missing a shadow test
+Warning at line 59, column 5: Unused variable 'e'
+Warning: Function 'unwrap_balance' is missing a shadow test
+Warning: Function 'check_eq' is missing a shadow test
+Warning: Function 'mul2pass' is missing a shadow test
+PASS1PASS2PASS3PASS4PASS5PASS6PASS7PASS7PASS8PASS8PASS9PASS9PASS10PASS10PASS11PASS11PASS12PASS12PASS13PASS14TOTAL_PASSED14
+----- exit code -----
+0

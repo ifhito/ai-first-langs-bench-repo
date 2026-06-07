@@ -1,0 +1,433 @@
+use std.mem
+
+// ---------------------------------------------------------------------------
+// Hand-written JSON parser for zerolang (recursive descent).
+//
+// The zerolang direct backend does not support user `type` shapes at runtime,
+// so parser state is threaded through caller-owned fixed arrays exposed as
+// MutSpan views:
+//
+//   src : Span<u8>      - the input text (immutable)
+//   out : MutSpan<u8>   - canonical normalized serialization is appended here
+//   st  : MutSpan<usize>- shared state cells:
+//                           st[0] = current read position in src
+//                           st[1] = current write length in out
+//                           st[2] = error flag (0 = ok, 1 = error)
+//
+// parseValue consumes one JSON value from src starting at st[0] and emits its
+// canonical normalized form into out. On any malformed input it sets st[2]=1
+// and returns without crashing. Comparison against the expected value is done
+// on the normalized serialization (pass_basis = "normalized").
+// ---------------------------------------------------------------------------
+
+fn srcLen(src: Span<u8>) -> usize {
+    return std.mem.len(src)
+}
+
+fn at(src: Span<u8>, i: usize) -> u8 {
+    if i < std.mem.len(src) {
+        return src[i]
+    }
+    return 0_u8
+}
+
+fn isDigit(c: u8) -> Bool {
+    return c >= 48_u8 && c <= 57_u8
+}
+
+fn isWs(c: u8) -> Bool {
+    return c == 32_u8 || c == 9_u8 || c == 10_u8 || c == 13_u8
+}
+
+fn skipWs(src: Span<u8>, st: MutSpan<usize>) -> Void {
+    var p: usize = st[0]
+    let n: usize = srcLen(src)
+    while p < n && isWs(at(src, p)) {
+        p = p + 1
+    }
+    st[0] = p
+}
+
+fn fail(st: MutSpan<usize>) -> Void {
+    st[2] = 1
+}
+
+fn emit(out: MutSpan<u8>, st: MutSpan<usize>, c: u8) -> Void {
+    let w: usize = st[1]
+    if w < std.mem.len(out) {
+        out[w] = c
+        st[1] = w + 1
+    } else {
+        st[2] = 1
+    }
+}
+
+// Match a literal keyword (e.g. "null") at the current position and emit it.
+fn matchLit(src: Span<u8>, out: MutSpan<u8>, st: MutSpan<usize>, lit: Span<u8>) -> Bool {
+    let m: usize = std.mem.len(lit)
+    var i: usize = 0
+    let start: usize = st[0]
+    while i < m {
+        if at(src, start + i) != lit[i] {
+            return false
+        }
+        i = i + 1
+    }
+    st[0] = start + m
+    var k: usize = 0
+    while k < m {
+        emit(out, st, lit[k])
+        k = k + 1
+    }
+    return true
+}
+
+// Parse and emit a JSON string token. Input position must be at the opening
+// quote. Emits a canonical re-encoded string with escapes for " \ and newline.
+fn parseString(src: Span<u8>, out: MutSpan<u8>, st: MutSpan<usize>) -> Void {
+    let n: usize = srcLen(src)
+    var p: usize = st[0]
+    // opening quote
+    if at(src, p) != 34_u8 {
+        fail(st)
+        return
+    }
+    p = p + 1
+    emit(out, st, 34_u8)
+    var done: Bool = false
+    while done == false {
+        if p >= n {
+            // unterminated string
+            fail(st)
+            return
+        }
+        let c: u8 = at(src, p)
+        if c == 34_u8 {
+            // closing quote
+            p = p + 1
+            emit(out, st, 34_u8)
+            done = true
+        } else if c == 92_u8 {
+            // escape sequence
+            p = p + 1
+            if p >= n {
+                fail(st)
+                return
+            }
+            let e: u8 = at(src, p)
+            if e == 34_u8 {
+                emit(out, st, 92_u8)
+                emit(out, st, 34_u8)
+                p = p + 1
+            } else if e == 92_u8 {
+                emit(out, st, 92_u8)
+                emit(out, st, 92_u8)
+                p = p + 1
+            } else if e == 110_u8 {
+                // \n  -> keep as escaped newline in canonical form
+                emit(out, st, 92_u8)
+                emit(out, st, 110_u8)
+                p = p + 1
+            } else {
+                // unsupported escape
+                fail(st)
+                return
+            }
+        } else {
+            emit(out, st, c)
+            p = p + 1
+        }
+    }
+    st[0] = p
+}
+
+// Parse and emit a JSON number. No leading zeros (except bare 0), no trailing
+// dot, must have a digit before and after a decimal point.
+fn parseNumber(src: Span<u8>, out: MutSpan<u8>, st: MutSpan<usize>) -> Void {
+    let n: usize = srcLen(src)
+    var p: usize = st[0]
+    let start: usize = p
+    // optional minus
+    if p < n && at(src, p) == 45_u8 {
+        emit(out, st, 45_u8)
+        p = p + 1
+    }
+    // integer part
+    if p >= n || isDigit(at(src, p)) == false {
+        fail(st)
+        return
+    }
+    let firstDigit: u8 = at(src, p)
+    var intDigits: usize = 0
+    while p < n && isDigit(at(src, p)) {
+        emit(out, st, at(src, p))
+        p = p + 1
+        intDigits = intDigits + 1
+    }
+    // leading zero check: "01" invalid, but "0" and "0.x" ok
+    if firstDigit == 48_u8 && intDigits > 1 {
+        fail(st)
+        return
+    }
+    // optional fraction
+    if p < n && at(src, p) == 46_u8 {
+        emit(out, st, 46_u8)
+        p = p + 1
+        // must be at least one digit after the dot
+        if p >= n || isDigit(at(src, p)) == false {
+            fail(st)
+            return
+        }
+        while p < n && isDigit(at(src, p)) {
+            emit(out, st, at(src, p))
+            p = p + 1
+        }
+    }
+    st[0] = p
+}
+
+fn parseArray(src: Span<u8>, out: MutSpan<u8>, st: MutSpan<usize>) -> Void {
+    let n: usize = srcLen(src)
+    // opening bracket
+    st[0] = st[0] + 1
+    emit(out, st, 91_u8)
+    skipWs(src, st)
+    if st[0] < n && at(src, st[0]) == 93_u8 {
+        // empty array
+        st[0] = st[0] + 1
+        emit(out, st, 93_u8)
+        return
+    }
+    var first: Bool = true
+    var loop: Bool = true
+    while loop {
+        if first == false {
+            emit(out, st, 44_u8)
+        }
+        first = false
+        skipWs(src, st)
+        parseValue(src, out, st)
+        if st[2] == 1 {
+            return
+        }
+        skipWs(src, st)
+        if st[0] >= n {
+            fail(st)
+            return
+        }
+        let c: u8 = at(src, st[0])
+        if c == 44_u8 {
+            st[0] = st[0] + 1
+        } else if c == 93_u8 {
+            st[0] = st[0] + 1
+            emit(out, st, 93_u8)
+            loop = false
+        } else {
+            fail(st)
+            return
+        }
+    }
+}
+
+fn parseObject(src: Span<u8>, out: MutSpan<u8>, st: MutSpan<usize>) -> Void {
+    let n: usize = srcLen(src)
+    // opening brace
+    st[0] = st[0] + 1
+    emit(out, st, 123_u8)
+    skipWs(src, st)
+    if st[0] < n && at(src, st[0]) == 125_u8 {
+        // empty object
+        st[0] = st[0] + 1
+        emit(out, st, 125_u8)
+        return
+    }
+    var first: Bool = true
+    var loop: Bool = true
+    while loop {
+        if first == false {
+            emit(out, st, 44_u8)
+        }
+        first = false
+        skipWs(src, st)
+        // key must be a string
+        if st[0] >= n || at(src, st[0]) != 34_u8 {
+            fail(st)
+            return
+        }
+        parseString(src, out, st)
+        if st[2] == 1 {
+            return
+        }
+        skipWs(src, st)
+        // colon
+        if st[0] >= n || at(src, st[0]) != 58_u8 {
+            fail(st)
+            return
+        }
+        st[0] = st[0] + 1
+        emit(out, st, 58_u8)
+        skipWs(src, st)
+        parseValue(src, out, st)
+        if st[2] == 1 {
+            return
+        }
+        skipWs(src, st)
+        if st[0] >= n {
+            fail(st)
+            return
+        }
+        let c: u8 = at(src, st[0])
+        if c == 44_u8 {
+            st[0] = st[0] + 1
+        } else if c == 125_u8 {
+            st[0] = st[0] + 1
+            emit(out, st, 125_u8)
+            loop = false
+        } else {
+            fail(st)
+            return
+        }
+    }
+}
+
+fn parseValue(src: Span<u8>, out: MutSpan<u8>, st: MutSpan<usize>) -> Void {
+    skipWs(src, st)
+    let n: usize = srcLen(src)
+    if st[0] >= n {
+        fail(st)
+        return
+    }
+    let c: u8 = at(src, st[0])
+    if c == 110_u8 {
+        if matchLit(src, out, st, "null") == false {
+            fail(st)
+        }
+    } else if c == 116_u8 {
+        if matchLit(src, out, st, "true") == false {
+            fail(st)
+        }
+    } else if c == 102_u8 {
+        if matchLit(src, out, st, "false") == false {
+            fail(st)
+        }
+    } else if c == 34_u8 {
+        parseString(src, out, st)
+    } else if c == 91_u8 {
+        parseArray(src, out, st)
+    } else if c == 123_u8 {
+        parseObject(src, out, st)
+    } else if c == 45_u8 || isDigit(c) {
+        parseNumber(src, out, st)
+    } else {
+        fail(st)
+    }
+}
+
+// Top-level: parse a complete document. Returns true on success and sets
+// out length in st[1]. On error returns false (never crashes).
+fn parseDocument(src: Span<u8>, out: MutSpan<u8>, st: MutSpan<usize>) -> Bool {
+    st[0] = 0
+    st[1] = 0
+    st[2] = 0
+    parseValue(src, out, st)
+    if st[2] == 1 {
+        return false
+    }
+    skipWs(src, st)
+    // trailing content after the value is an error
+    if st[0] != srcLen(src) {
+        return false
+    }
+    return true
+}
+
+// ---------------------------------------------------------------------------
+// Test harness
+// ---------------------------------------------------------------------------
+
+fn writeStr(world: World, s: String) -> Void raises {
+    check world.out.write(s)
+}
+
+// Run one NORMAL case: parse `input`, expect success and normalized == want.
+fn runNormal(world: World, name: String, input: String, want: String) -> Bool raises {
+    var buf: [256]u8 = [0_u8; 256]
+    let out: MutSpan<u8> = buf
+    var state: [3]usize = [0, 0, 0]
+    let st: MutSpan<usize> = state
+    let ok: Bool = parseDocument(input, out, st)
+    var pass: Bool = false
+    if ok {
+        let produced: Span<u8> = std.mem.prefix(buf, st[1])
+        if std.mem.eql(produced, want) {
+            pass = true
+        }
+    }
+    if pass {
+        check world.out.write("PASS ")
+    } else {
+        check world.out.write("FAIL ")
+    }
+    check world.out.write(name)
+    check world.out.write("\n")
+    return pass
+}
+
+// Run one ERROR case: parse `input`, expect rejection (no crash).
+fn runError(world: World, name: String, input: String) -> Bool raises {
+    var buf: [256]u8 = [0_u8; 256]
+    let out: MutSpan<u8> = buf
+    var state: [3]usize = [0, 0, 0]
+    let st: MutSpan<usize> = state
+    let ok: Bool = parseDocument(input, out, st)
+    var pass: Bool = false
+    if ok == false {
+        pass = true
+    }
+    if pass {
+        check world.out.write("PASS ")
+    } else {
+        check world.out.write("FAIL ")
+    }
+    check world.out.write(name)
+    check world.out.write("\n")
+    return pass
+}
+
+pub fn main(world: World) -> Void raises {
+    var passed: usize = 0
+
+    // NORMAL cases (value compared via canonical normalized form)
+    if runNormal(world, "01 null", "null", "null") { passed = passed + 1 }
+    if runNormal(world, "02 true", "true", "true") { passed = passed + 1 }
+    if runNormal(world, "03 false", "false", "false") { passed = passed + 1 }
+    if runNormal(world, "04 int 42", "42", "42") { passed = passed + 1 }
+    if runNormal(world, "05 float 3.14", "3.14", "3.14") { passed = passed + 1 }
+    if runNormal(world, "06 string hello", "\"hello\"", "\"hello\"") { passed = passed + 1 }
+    if runNormal(world, "07 string esc", "\"a\\\"b\"", "\"a\\\"b\"") { passed = passed + 1 }
+    if runNormal(world, "08 empty array", "[]", "[]") { passed = passed + 1 }
+    if runNormal(world, "09 empty object", "{}", "{}") { passed = passed + 1 }
+    if runNormal(world, "10 array nums", "[1, 2, 3]", "[1,2,3]") { passed = passed + 1 }
+    if runNormal(world, "11 object", "{\"a\": 1, \"b\": true}", "{\"a\":1,\"b\":true}") { passed = passed + 1 }
+    if runNormal(world, "12 nested", "{\"a\": [1, {\"b\": null}]}", "{\"a\":[1,{\"b\":null}]}") { passed = passed + 1 }
+    if runNormal(world, "13 spaces 42", " 42 ", "42") { passed = passed + 1 }
+
+    // ERROR cases (must be rejected without crashing)
+    if runError(world, "14 empty", "") { passed = passed + 1 }
+    if runError(world, "15 trailing comma", "[1, 2, ]") { passed = passed + 1 }
+    if runError(world, "16 unterminated array", "[1, 2") { passed = passed + 1 }
+    if runError(world, "17 unterminated object", "{\"a\": 1") { passed = passed + 1 }
+    if runError(world, "18 leading zero", "01") { passed = passed + 1 }
+    if runError(world, "19 trailing dot", "1.") { passed = passed + 1 }
+    if runError(world, "20 leading dot", ".5") { passed = passed + 1 }
+    if runError(world, "21 bareword", "foo") { passed = passed + 1 }
+    if runError(world, "22 unterminated string", "\"abc") { passed = passed + 1 }
+
+    check world.out.write("PASS ")
+    var pbuf: [8]u8 = [0_u8; 8]
+    let pf: Maybe<Span<u8>> = std.fmt.usize(pbuf, passed)
+    if pf.has {
+        check world.out.write(pf.value)
+    }
+    check world.out.write("/22\n")
+}

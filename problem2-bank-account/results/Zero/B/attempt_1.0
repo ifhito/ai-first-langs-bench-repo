@@ -1,0 +1,170 @@
+// Bank account: deposit, withdraw, balance.
+// Amounts must be positive integers (<= 0 rejected as error).
+// Withdrawal exceeding balance is rejected (balance unchanged).
+// Balance always >= 0. Integers only.
+
+type Account {
+    balance: i64,
+}
+
+fn newAccount() -> Account {
+    return Account { balance: 0 }
+}
+
+fn balance(account: ref<Account>) -> i64 {
+    return account.balance
+}
+
+// Deposit a positive amount. Non-positive amounts raise; balance is unchanged on raise.
+fn deposit(account: mutref<Account>, amount: i64) -> Void raises [Invalid] {
+    if amount <= 0 {
+        raise Invalid
+    }
+    account.balance = account.balance + amount
+}
+
+// Withdraw a positive amount that does not exceed the balance.
+// Non-positive amount or overdraft raises; balance is unchanged on raise.
+fn withdraw(account: mutref<Account>, amount: i64) -> Void raises [Invalid, Insufficient] {
+    if amount <= 0 {
+        raise Invalid
+    }
+    if amount > account.balance {
+        raise Insufficient
+    }
+    account.balance = account.balance - amount
+}
+
+// --- Test harness ---
+
+fn report(world: World, name: String, ok: Bool, passed: mutref<i32>) -> Void raises {
+    if ok {
+        passed = passed + 1
+        check world.out.write("PASS ")
+    } else {
+        check world.out.write("FAIL ")
+    }
+    check world.out.write(name)
+    check world.out.write("\n")
+}
+
+pub fn main(world: World) -> Void raises {
+    var passed: i32 = 0
+
+    // Case 1: fresh account => 0
+    var a1: Account = newAccount()
+    report(world, "case1 fresh balance 0", balance(&a1) == 0, &mut passed)
+
+    // Case 2: deposit 100 => 100
+    var a2: Account = newAccount()
+    check deposit(&mut a2, 100)
+    report(world, "case2 dep100 => 100", balance(&a2) == 100, &mut passed)
+
+    // Case 3: deposit 100, deposit 50 => 150
+    var a3: Account = newAccount()
+    check deposit(&mut a3, 100)
+    check deposit(&mut a3, 50)
+    report(world, "case3 dep100 dep50 => 150", balance(&a3) == 150, &mut passed)
+
+    // Case 4: deposit 100, withdraw 30 => 70
+    var a4: Account = newAccount()
+    check deposit(&mut a4, 100)
+    check withdraw(&mut a4, 30)
+    report(world, "case4 dep100 wd30 => 70", balance(&a4) == 70, &mut passed)
+
+    // Case 5: deposit 100, withdraw 100 => 0
+    var a5: Account = newAccount()
+    check deposit(&mut a5, 100)
+    check withdraw(&mut a5, 100)
+    report(world, "case5 dep100 wd100 => 0", balance(&a5) == 0, &mut passed)
+
+    // Case 6: deposit 50, deposit 50, withdraw 80 => 20
+    var a6: Account = newAccount()
+    check deposit(&mut a6, 50)
+    check deposit(&mut a6, 50)
+    check withdraw(&mut a6, 80)
+    report(world, "case6 dep50 dep50 wd80 => 20", balance(&a6) == 20, &mut passed)
+
+    // Case 7: fresh, withdraw 10 => rejected, balance 0
+    var a7: Account = newAccount()
+    var c7_rejected: Bool = false
+    rescue withdraw(&mut a7, 10) err {
+        c7_rejected = true
+    }
+    report(world, "case7 fresh wd10 rejected & balance 0", c7_rejected && balance(&a7) == 0, &mut passed)
+
+    // Case 8: deposit 100, withdraw 101 => rejected, balance 100
+    var a8: Account = newAccount()
+    check deposit(&mut a8, 100)
+    var c8_rejected: Bool = false
+    rescue withdraw(&mut a8, 101) err {
+        c8_rejected = true
+    }
+    report(world, "case8 dep100 wd101 rejected & balance 100", c8_rejected && balance(&a8) == 100, &mut passed)
+
+    // Case 9: deposit -50 => rejected, balance 0
+    var a9: Account = newAccount()
+    var c9_rejected: Bool = false
+    rescue deposit(&mut a9, -50) err {
+        c9_rejected = true
+    }
+    report(world, "case9 dep(-50) rejected & balance 0", c9_rejected && balance(&a9) == 0, &mut passed)
+
+    // Case 10: withdraw -50 => rejected, balance 0
+    var a10: Account = newAccount()
+    var c10_rejected: Bool = false
+    rescue withdraw(&mut a10, -50) err {
+        c10_rejected = true
+    }
+    report(world, "case10 wd(-50) rejected & balance 0", c10_rejected && balance(&a10) == 0, &mut passed)
+
+    // Case 11: deposit 0 => rejected, balance 0
+    var a11: Account = newAccount()
+    var c11_rejected: Bool = false
+    rescue deposit(&mut a11, 0) err {
+        c11_rejected = true
+    }
+    report(world, "case11 dep(0) rejected & balance 0", c11_rejected && balance(&a11) == 0, &mut passed)
+
+    // Case 12: withdraw 0 => rejected, balance 0
+    var a12: Account = newAccount()
+    var c12_rejected: Bool = false
+    rescue withdraw(&mut a12, 0) err {
+        c12_rejected = true
+    }
+    report(world, "case12 wd(0) rejected & balance 0", c12_rejected && balance(&a12) == 0, &mut passed)
+
+    // Case 13: invariant - balance never negative across a sequence
+    var a13: Account = newAccount()
+    check deposit(&mut a13, 100)
+    rescue withdraw(&mut a13, 999) err { }
+    check withdraw(&mut a13, 100)
+    rescue withdraw(&mut a13, 1) err { }
+    report(world, "case13 invariant never negative", balance(&a13) >= 0 && balance(&a13) == 0, &mut passed)
+
+    // Case 14: each error case left balance unchanged (composite)
+    var a14: Account = newAccount()
+    check deposit(&mut a14, 200)
+    let before: i64 = balance(&a14)
+    var c14_ok: Bool = true
+    rescue deposit(&mut a14, -1) err { }
+    if balance(&a14) != before { c14_ok = false }
+    rescue deposit(&mut a14, 0) err { }
+    if balance(&a14) != before { c14_ok = false }
+    rescue withdraw(&mut a14, -1) err { }
+    if balance(&a14) != before { c14_ok = false }
+    rescue withdraw(&mut a14, 0) err { }
+    if balance(&a14) != before { c14_ok = false }
+    rescue withdraw(&mut a14, 9999) err { }
+    if balance(&a14) != before { c14_ok = false }
+    report(world, "case14 errors leave balance unchanged", c14_ok && balance(&a14) == 200, &mut passed)
+
+    // Summary
+    var sumbuf: [12]u8 = [0_u8; 12]
+    let sumtext: Maybe<Span<u8>> = std.fmt.i32(sumbuf, passed)
+    check world.out.write("PASS ")
+    if sumtext.has {
+        check world.out.write(sumtext.value)
+    }
+    check world.out.write("/14\n")
+}

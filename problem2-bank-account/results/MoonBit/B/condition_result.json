@@ -1,0 +1,27 @@
+{
+  "language": "MoonBit",
+  "condition": "B",
+  "status": "DONE",
+  "pass_at_1": false,
+  "fix_rounds": 2,
+  "final_pass_count": "14/14",
+  "loc": 27,
+  "tokens": 187,
+  "self_recovered": true,
+  "error_quality": "Idiomatic: dedicated `suberror AccountError` with structured variants NonPositiveAmount(Int) and InsufficientFunds(balance, requested), surfaced via `raise` in the function's `-> Unit raise AccountError` signature; callers must handle via try/catch.",
+  "notes": "balance>=0 is guaranteed by hand-written runtime checks, NOT by the type system. `balance` is a plain `mut Int` field with no refinement/contract. Each mutating op uses `guard` clauses: deposit rejects amount<=0; withdraw rejects amount<=0 and amount>balance, raising before any mutation. Because the only subtraction (withdraw) is gated by `guard amount <= self.balance`, the result can never go below 0, and on any rejected op the function raises before touching the field so balance is left unchanged/valid. The compiler does not prove the invariant.",
+  "attempts": [
+    {"attempt": 1, "pass_count": 0, "failed_cases": ["compile error: invalid labelled-argument supply syntax `name~=..` (should be `name=..`); plus deprecation warning on derive(Show)"]},
+    {"attempt": 2, "pass_count": 14, "failed_cases": []},
+    {"attempt": 3, "pass_count": 14, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "Error: [3016] The syntax `balance~=..` for supplying labelled argument is invalid, the correct syntax is `balance=..`.",
+    "Error: [3016] The syntax `requested~=..` for supplying labelled argument is invalid, the correct syntax is `requested=..`.",
+    "Warning: [0027] Warning (deprecated_syntax): `derive(Show)` is deprecated. Use `derive(Debug)` or manually implement the `Show` trait instead.",
+    "Warning: [0027] This `fn` may raise error but is not annotated with `raise` ... use arrow function `(..) => ...` instead (test code only; cleaned in attempt 3)",
+    "Total tests: 14, passed: 14, failed: 0."
+  ],
+  "toolchain_notes": "moon 0.1.20260529 (3e1c753 2026-05-29). Official guide fetch FAILED: `curl -fsSL https://docs.moonbitlang.com/llms.txt` returns HTTP 404. Fell back to toolchain-as-guide: `moon help`, inspection of a fresh `moon new` project (AGENTS.md, moon.mod, moon.pkg, *.mbt scaffolds), and raw `moon test` diagnostics. Project created with `docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem2-bank-account/results/MoonBit/B ai-lang-bench bash -lc 'moon new bankacct'`. Tests run with `docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem2-bank-account/results/MoonBit/B ai-lang-bench bash -lc 'cd bankacct && moon test'`. This moon version uses moon.pkg/moon.mod (not moon.pkg.json/moon.mod.json) and newer `suberror`/`raise`/`guard` syntax.",
+  "self_recovered_normalized": true
+}

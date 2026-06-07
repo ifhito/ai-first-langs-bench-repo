@@ -1,0 +1,22 @@
+{
+  "language": "Python",
+  "conditions": {
+    "A": {
+      "status": "DONE",
+      "pass_at_1": true,
+      "fix_rounds": 0,
+      "final_pass_count": "14/14",
+      "loc": 35,
+      "tokens": 111,
+      "self_recovered": false,
+      "error_quality": "free - custom BankAccountError with descriptive messages; no error needed (pass@1).",
+      "notes": "Invariant enforcement = AI hand-written defensive checks. No type/contract guarantee. _validate_amount rejects non-int/bool and <=0 by raising; withdraw raises before mutating when amount>balance. State mutated only after all checks pass, so balance never goes <0 and is unchanged on error.",
+      "attempts": [{"attempt": 1, "pass_count": 14, "failed_cases": []}],
+      "raw_error_excerpts": [],
+      "toolchain_notes": "docker run --rm -v <repo>:/bench -w .../Python/A ai-lang-bench python3 run_tests.py ; Python 3.13.5.",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "python3 run_tests.py", "result": "PASS 14/14"}
+    }
+  },
+  "status": "DONE"
+}

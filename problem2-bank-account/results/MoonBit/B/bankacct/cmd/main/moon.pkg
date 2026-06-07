@@ -1,0 +1,7 @@
+// import {
+//   "username/bankacct" @lib,
+// }
+
+options(
+  "is-main": true,
+)

@@ -1,0 +1,150 @@
+// Bank account: deposit, withdraw, balance.
+// Amounts must be positive integers (<= 0 rejected as error).
+// Withdrawal exceeding balance is rejected (balance unchanged).
+// Balance always >= 0. Integers only.
+//
+// The account state is a single non-negative i64 balance. The operations are
+// pure: they take the current balance and a positive amount and return the new
+// balance, or `raise` when the request is invalid. A raise produces no new
+// balance, so the caller keeps the prior (valid) balance unchanged.
+
+// Deposit a positive amount onto the balance.
+// Non-positive amounts raise Invalid; no new balance is produced.
+fn deposit(balance: i64, amount: i64) -> i64 raises [Invalid] {
+    if amount <= 0 {
+        raise Invalid
+    }
+    return balance + amount
+}
+
+// Withdraw a positive amount that does not exceed the balance.
+// Non-positive amount raises Invalid; overdraft raises Insufficient.
+// On either raise no new balance is produced, so the balance is left unchanged.
+fn withdraw(balance: i64, amount: i64) -> i64 raises [Invalid, Insufficient] {
+    if amount <= 0 {
+        raise Invalid
+    }
+    if amount > balance {
+        raise Insufficient
+    }
+    return balance - amount
+}
+
+// --- Test harness ---
+
+// Prints PASS/FAIL for a case and returns 1 when it passed, 0 otherwise.
+fn report(world: World, name: String, ok: Bool) -> i32 raises {
+    if ok {
+        check world.out.write("PASS ")
+        check world.out.write(name)
+        check world.out.write("\n")
+        return 1
+    }
+    check world.out.write("FAIL ")
+    check world.out.write(name)
+    check world.out.write("\n")
+    return 0
+}
+
+pub fn main(world: World) -> Void raises {
+    var passed: i32 = 0
+
+    // Case 1: fresh account => 0
+    let b1: i64 = 0
+    let r1: i32 = check report(world, "case1 fresh balance 0", b1 == 0)
+    passed = passed + r1
+
+    // Case 2: deposit 100 => 100
+    let b2: i64 = check deposit(0, 100)
+    let r2: i32 = check report(world, "case2 dep100 => 100", b2 == 100)
+    passed = passed + r2
+
+    // Case 3: deposit 100, deposit 50 => 150
+    let b3a: i64 = check deposit(0, 100)
+    let b3: i64 = check deposit(b3a, 50)
+    let r3: i32 = check report(world, "case3 dep100 dep50 => 150", b3 == 150)
+    passed = passed + r3
+
+    // Case 4: deposit 100, withdraw 30 => 70
+    let b4a: i64 = check deposit(0, 100)
+    let b4: i64 = check withdraw(b4a, 30)
+    let r4: i32 = check report(world, "case4 dep100 wd30 => 70", b4 == 70)
+    passed = passed + r4
+
+    // Case 5: deposit 100, withdraw 100 => 0
+    let b5a: i64 = check deposit(0, 100)
+    let b5: i64 = check withdraw(b5a, 100)
+    let r5: i32 = check report(world, "case5 dep100 wd100 => 0", b5 == 0)
+    passed = passed + r5
+
+    // Case 6: deposit 50, deposit 50, withdraw 80 => 20
+    let b6a: i64 = check deposit(0, 50)
+    let b6b: i64 = check deposit(b6a, 50)
+    let b6: i64 = check withdraw(b6b, 80)
+    let r6: i32 = check report(world, "case6 dep50 dep50 wd80 => 20", b6 == 20)
+    passed = passed + r6
+
+    // Case 7: fresh, withdraw 10 => rejected, balance 0
+    let b7: i64 = 0
+    let b7next: i64 = rescue withdraw(b7, 10) err b7
+    let r7: i32 = check report(world, "case7 fresh wd10 rejected & balance 0", b7next == 0)
+    passed = passed + r7
+
+    // Case 8: deposit 100, withdraw 101 => rejected, balance 100
+    let b8: i64 = check deposit(0, 100)
+    let b8next: i64 = rescue withdraw(b8, 101) err b8
+    let r8: i32 = check report(world, "case8 dep100 wd101 rejected & balance 100", b8next == 100)
+    passed = passed + r8
+
+    // Case 9: deposit -50 => rejected, balance 0
+    let b9: i64 = 0
+    let b9next: i64 = rescue deposit(b9, -50) err b9
+    let r9: i32 = check report(world, "case9 dep(-50) rejected & balance 0", b9next == 0)
+    passed = passed + r9
+
+    // Case 10: withdraw -50 => rejected, balance 0
+    let b10: i64 = 0
+    let b10next: i64 = rescue withdraw(b10, -50) err b10
+    let r10: i32 = check report(world, "case10 wd(-50) rejected & balance 0", b10next == 0)
+    passed = passed + r10
+
+    // Case 11: deposit 0 => rejected, balance 0
+    let b11: i64 = 0
+    let b11next: i64 = rescue deposit(b11, 0) err b11
+    let r11: i32 = check report(world, "case11 dep(0) rejected & balance 0", b11next == 0)
+    passed = passed + r11
+
+    // Case 12: withdraw 0 => rejected, balance 0
+    let b12: i64 = 0
+    let b12next: i64 = rescue withdraw(b12, 0) err b12
+    let r12: i32 = check report(world, "case12 wd(0) rejected & balance 0", b12next == 0)
+    passed = passed + r12
+
+    // Case 13: invariant - balance never negative across a sequence
+    let b13a: i64 = check deposit(0, 100)
+    let b13b: i64 = rescue withdraw(b13a, 999) err b13a
+    let b13c: i64 = check withdraw(b13b, 100)
+    let b13: i64 = rescue withdraw(b13c, 1) err b13c
+    let r13: i32 = check report(world, "case13 invariant never negative", b13 >= 0 && b13 == 0)
+    passed = passed + r13
+
+    // Case 14: each error case left balance unchanged
+    let base: i64 = check deposit(0, 200)
+    let n1: i64 = rescue deposit(base, -1) err base
+    let n2: i64 = rescue deposit(base, 0) err base
+    let n3: i64 = rescue withdraw(base, -1) err base
+    let n4: i64 = rescue withdraw(base, 0) err base
+    let n5: i64 = rescue withdraw(base, 9999) err base
+    let unchanged: Bool = n1 == base && n2 == base && n3 == base && n4 == base && n5 == base
+    let r14: i32 = check report(world, "case14 errors leave balance unchanged", unchanged && base == 200)
+    passed = passed + r14
+
+    // Summary
+    var sumbuf: [12]u8 = [0_u8; 12]
+    let sumtext: Maybe<Span<u8>> = std.fmt.i32(sumbuf, passed)
+    check world.out.write("PASS ")
+    if sumtext.has {
+        check world.out.write(sumtext.value)
+    }
+    check world.out.write("/14\n")
+}

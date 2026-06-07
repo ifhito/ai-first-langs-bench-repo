@@ -1,0 +1,58 @@
+{
+  "language": "Zero",
+  "conditions": {
+    "A": {
+      "status": "DONE",
+      "pass_at_1": false,
+      "fix_rounds": 1,
+      "final_pass_count": "14/14",
+      "loc": 178,
+      "tokens": 869,
+      "self_recovered": true,
+      "error_quality": "structured - zero check --json gives code/message/expected/actual/help/repair; BLD004 names each unsupported construct. Recovered syntax from diagnostics alone.",
+      "notes": "Invariant enforcement = AI hand-written checks (type system not usable at runtime). The direct AArch64 backend MVP rejects record/struct locals and non-function top-level decls (BLD004), so an idiomatic Account struct + Result enum compiles (languageOk=true) but cannot be built. Final code reduces state to a plain i64 balance threaded through value-returning functions; deposit/withdraw return new balance or -1 sentinel; apply() keeps the previous balance on a negative result. No verified contract. Pass count reported via process exit code (no stdout std helper recoverable under Pattern A).",
+      "attempts": [
+        {"attempt": 1, "pass_count": 0, "failed_cases": ["did not compile: PAR100 'expected canonical declaration' on 'struct'"]},
+        {"attempt": 2, "pass_count": 14, "failed_cases": []}
+      ],
+      "raw_error_excerpts": [
+        "PAR100 'expected canonical declaration' actual 'struct'",
+        "probe: void fns still need '-> Void'; types are capitalized (Bool/Void/i64)",
+        "BLD004 'direct AArch64 object buildability does not support this local type' actual 'record' (languageOk=true, buildable=false)",
+        "BLD004 'direct backend MVP does not support declarations other than functions' (top-level const/let)",
+        "std.io.println -> 'unknown std helper' (used exit code instead)"
+      ],
+      "toolchain_notes": "zero 0.2.1. zero check --json attempt_2.0 / zero run attempt_2.0 (bare-file run; exit code = main's i64 return = pass count). NO guide/examples consulted; syntax from diagnostics + prior knowledge only.",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "zero run attempt_2.0 ; echo exit=$?", "result": "exit=14 (=14/14 passed)"}
+    },
+    "B": {
+      "status": "DONE",
+      "pass_at_1": false,
+      "fix_rounds": 4,
+      "final_pass_count": "14/14",
+      "loc": 227,
+      "tokens": 1233,
+      "self_recovered": true,
+      "error_quality": "structured - stable codes (BLD004/TYP009/ERR003/PAR100), precise spans, expected/actual, help/repair, safetyFacts; `zero explain` gives prose + bad/good examples. BLD004 named each unsupported construct.",
+      "notes": "Invariant enforcement = AI hand-written checks. The guide's full toolkit (shapes, mutref, choice error types, Maybe, raises [E]) all COMPILE-CHECK (languageOk:true) but the default `zero run` direct-AArch64 backend MVP rejects every one of them on buildability (BLD004) — including the guide's own raises-with-value example. Working design: plain i64 balance; deposit/withdraw return new balance or -1 sentinel; applyResult keeps prior balance on negative result (the one place the never-negative invariant is enforced by hand).",
+      "attempts": [
+        {"attempt": 1, "pass_count": 0, "failed_cases": ["PAR100 rescue block form unsupported"]},
+        {"attempt": 2, "pass_count": 0, "failed_cases": ["BLD004 ref<Account> param unsupported"]},
+        {"attempt": 3, "pass_count": 0, "failed_cases": ["BLD004 fallible (raises) i64 return unsupported"]},
+        {"attempt": 4, "pass_count": 0, "failed_cases": ["BLD004 top-level const / World param unsupported"]},
+        {"attempt": 5, "pass_count": 14, "failed_cases": []}
+      ],
+      "raw_error_excerpts": [
+        "BLD004 direct backend parameter type is unsupported | actual: ref<Account>",
+        "BLD004 direct backend fallible return type is unsupported | actual: i64",
+        "BLD004 ... does not support declarations other than functions | choice/type/const",
+        "BLD004 direct backend call parameter type is unsupported | actual: World"
+      ],
+      "toolchain_notes": "zero 0.2.1, host linux-arm64 (direct AArch64 ELF backend MVP, default for `zero run`). Guide fetch (bare ids): zero skills get language; diagnostics; stdlib. Build/run: zero check --json attempt_5.0 && zero run attempt_5.0 (prints per-case + 'PASS 14/14').",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "zero run attempt_5.0", "result": "PASS 14/14 (exit=0)"}
+    }
+  },
+  "status": "DONE"
+}

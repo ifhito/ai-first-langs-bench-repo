@@ -1,0 +1,7 @@
+// import {
+//   "username/jsonparser" @lib,
+// }
+
+options(
+  "is-main": true,
+)

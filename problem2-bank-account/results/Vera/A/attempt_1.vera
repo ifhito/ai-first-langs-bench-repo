@@ -1,0 +1,66 @@
+// Bank account in Vera.
+// Balance is a non-negative integer. Operations return a Result-like outcome.
+
+struct Account {
+    balance: int,
+}
+
+fn new_account() -> Account {
+    return Account { balance: 0 };
+}
+
+// deposit: amount must be positive. On error, balance unchanged.
+fn deposit(acc: Account, amount: int) -> Account
+    requires amount > 0
+    ensures result.balance == acc.balance + amount
+    ensures result.balance >= 0
+{
+    return Account { balance: acc.balance + amount };
+}
+
+// withdraw: amount positive and <= balance. On error, balance unchanged.
+fn withdraw(acc: Account, amount: int) -> Account
+    requires amount > 0
+    requires amount <= acc.balance
+    ensures result.balance == acc.balance - amount
+    ensures result.balance >= 0
+{
+    return Account { balance: acc.balance - amount };
+}
+
+fn balance(acc: Account) -> int
+    ensures result >= 0
+{
+    return acc.balance;
+}
+
+fn main() {
+    let mut passed: int = 0;
+
+    // Case 1: fresh => 0
+    let a1 = new_account();
+    if balance(a1) == 0 { passed = passed + 1; print("case1 PASS"); } else { print("case1 FAIL"); }
+
+    // Case 2: dep 100 => 100
+    let a2 = deposit(new_account(), 100);
+    if balance(a2) == 100 { passed = passed + 1; print("case2 PASS"); } else { print("case2 FAIL"); }
+
+    // Case 3: dep100, dep50 => 150
+    let a3 = deposit(deposit(new_account(), 100), 50);
+    if balance(a3) == 150 { passed = passed + 1; print("case3 PASS"); } else { print("case3 FAIL"); }
+
+    // Case 4: dep100, wd30 => 70
+    let a4 = withdraw(deposit(new_account(), 100), 30);
+    if balance(a4) == 70 { passed = passed + 1; print("case4 PASS"); } else { print("case4 FAIL"); }
+
+    // Case 5: dep100, wd100 => 0
+    let a5 = withdraw(deposit(new_account(), 100), 100);
+    if balance(a5) == 0 { passed = passed + 1; print("case5 PASS"); } else { print("case5 FAIL"); }
+
+    // Case 6: dep50, dep50, wd80 => 20
+    let a6 = withdraw(deposit(deposit(new_account(), 50), 50), 80);
+    if balance(a6) == 20 { passed = passed + 1; print("case6 PASS"); } else { print("case6 FAIL"); }
+
+    print("PASS");
+    print(passed);
+}

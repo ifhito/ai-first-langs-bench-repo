@@ -1,0 +1,21 @@
+## condition: Zero/B
+## command: indir problem2-bank-account/results/Zero/B zero run attempt_5.0
+## date(host): 2026-06-07T14:01:18Z
+----- stdout+stderr -----
+PASS case1 fresh balance 0
+PASS case2 dep100 => 100
+PASS case3 dep100 dep50 => 150
+PASS case4 dep100 wd30 => 70
+PASS case5 dep100 wd100 => 0
+PASS case6 dep50 dep50 wd80 => 20
+PASS case7 fresh wd10 rejected & balance 0
+PASS case8 dep100 wd101 rejected & balance 100
+PASS case9 dep(-50) rejected & balance 0
+PASS case10 wd(-50) rejected & balance 0
+PASS case11 dep(0) rejected & balance 0
+PASS case12 wd(0) rejected & balance 0
+PASS case13 invariant never negative
+PASS case14 errors leave balance unchanged
+PASS 14/14
+----- exit code -----
+0

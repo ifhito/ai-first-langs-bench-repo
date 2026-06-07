@@ -1,0 +1,168 @@
+-- Bank account: balance is a non-negative integer (Nat).
+-- Operations are pure functions returning Result<Nat, String>.
+-- Amounts must be positive integers; withdrawals cannot exceed balance.
+-- Contracts (requires/ensures) make the balance>=0 invariant machine-checkable.
+
+-- Result<T, E> and Option<T> are provided by the prelude.
+
+-- deposit: amount must be positive; on success returns the new balance.
+-- ensures: on Ok the new balance is old balance + amount (and therefore >= old);
+--          on Err the carried balance equals the old balance (unchanged).
+public fn deposit(@Nat, @Int -> @Result<Nat, String>)
+  requires(true)
+  ensures(match @Result<Nat, String>.result {
+    Ok(@Nat) -> @Int.0 > 0 && @Nat.0 == @Nat.1 + @Int.0,
+    Err(@String) -> @Int.0 <= 0
+  })
+  effects(pure)
+{
+  if @Int.0 > 0 then {
+    Ok(@Nat.0 + @Int.0)
+  } else {
+    Err("amount must be a positive integer")
+  }
+}
+
+-- withdraw: amount must be positive and must not exceed the balance.
+-- ensures: on Ok the new balance is old - amount (still >= 0 since amount <= old);
+--          on Err the balance is left unchanged (precondition violated).
+public fn withdraw(@Nat, @Int -> @Result<Nat, String>)
+  requires(true)
+  ensures(match @Result<Nat, String>.result {
+    Ok(@Nat) -> @Int.0 > 0 && @Int.0 <= @Nat.1 && @Nat.0 == @Nat.1 - @Int.0,
+    Err(@String) -> @Int.0 <= 0 || @Int.0 > @Nat.0
+  })
+  effects(pure)
+{
+  if @Int.0 > 0 then {
+    if @Int.0 <= nat_to_int(@Nat.0) then {
+      Ok(@Nat.0 - @Int.0)
+    } else {
+      Err("insufficient funds")
+    }
+  } else {
+    Err("amount must be a positive integer")
+  }
+}
+
+-- balance: the balance of an account is the Nat itself; always >= 0 by type.
+public fn balance(@Nat -> @Nat)
+  requires(true)
+  ensures(@Nat.result == @Nat.0)
+  effects(pure)
+{
+  @Nat.0
+}
+
+-- ---------------------------------------------------------------------------
+-- Test harness: runs all 14 cases and prints "PASS N/14".
+
+-- Helper: assert an Ok(balance) equals expected; returns 1 if it matches else 0.
+private fn check_ok(@Result<Nat, String>, @Nat -> @Nat)
+  requires(true)
+  ensures(true)
+  effects(pure)
+{
+  match @Result<Nat, String>.0 {
+    Ok(@Nat) -> if @Nat.0 == @Nat.1 then { 1 } else { 0 },
+    Err(@String) -> 0
+  }
+}
+
+-- Helper: assert an Err result; returns 1 if Err else 0.
+private fn check_err(@Result<Nat, String> -> @Nat)
+  requires(true)
+  ensures(true)
+  effects(pure)
+{
+  match @Result<Nat, String>.0 {
+    Ok(@Nat) -> 0,
+    Err(@String) -> 1
+  }
+}
+
+-- Helper: extract the balance carried through, defaulting unchanged on Err.
+-- For an Err the "current balance" is the input we passed in (unchanged).
+private fn bal_after(@Result<Nat, String>, @Nat -> @Nat)
+  requires(true)
+  ensures(true)
+  effects(pure)
+{
+  match @Result<Nat, String>.0 {
+    Ok(@Nat) -> @Nat.0,
+    Err(@String) -> @Nat.0
+  }
+}
+
+public fn main(@Unit -> @Unit)
+  requires(true)
+  ensures(true)
+  effects(<IO>)
+{
+  -- Case 1: fresh account, no ops => balance 0
+  let @Nat = balance(0);
+  let @Nat = if @Nat.0 == 0 then { 1 } else { 0 };  -- t1
+
+  -- Case 2: deposit 100 => 100
+  let @Nat = check_ok(deposit(0, 100), 100);          -- t2  (@Nat.1 = t1)
+
+  -- Case 3: deposit 100, deposit 50 => 150
+  let @Result<Nat, String> = deposit(0, 100);
+  let @Nat = bal_after(@Result<Nat, String>.0, 0);
+  let @Nat = check_ok(deposit(@Nat.0, 50), 150);      -- t3
+
+  -- Case 4: deposit 100, withdraw 30 => 70
+  let @Nat = check_ok(withdraw(100, 30), 70);         -- t4
+
+  -- Case 5: deposit 100, withdraw 100 => 0
+  let @Nat = check_ok(withdraw(100, 100), 0);         -- t5
+
+  -- Case 6: deposit 50, deposit 50, withdraw 80 => 20
+  let @Result<Nat, String> = deposit(0, 50);
+  let @Nat = bal_after(@Result<Nat, String>.0, 0);
+  let @Result<Nat, String> = deposit(@Nat.0, 50);
+  let @Nat = bal_after(@Result<Nat, String>.0, @Nat.0);
+  let @Nat = check_ok(withdraw(@Nat.0, 80), 20);      -- t6
+
+  -- Case 7: fresh, withdraw 10 => rejected, balance unchanged (0)
+  let @Result<Nat, String> = withdraw(0, 10);
+  let @Nat = if check_err(@Result<Nat, String>.0) == 1 && bal_after(@Result<Nat, String>.0, 0) == 0 then { 1 } else { 0 };  -- t7
+
+  -- Case 8: deposit 100, withdraw 101 => rejected, balance unchanged (100)
+  let @Result<Nat, String> = withdraw(100, 101);
+  let @Nat = if check_err(@Result<Nat, String>.0) == 1 && bal_after(@Result<Nat, String>.0, 100) == 100 then { 1 } else { 0 };  -- t8
+
+  -- Case 9: deposit -50 => rejected, balance unchanged (0)
+  let @Result<Nat, String> = deposit(0, -50);
+  let @Nat = if check_err(@Result<Nat, String>.0) == 1 && bal_after(@Result<Nat, String>.0, 0) == 0 then { 1 } else { 0 };  -- t9
+
+  -- Case 10: withdraw -50 => rejected, balance unchanged (0)
+  let @Result<Nat, String> = withdraw(0, -50);
+  let @Nat = if check_err(@Result<Nat, String>.0) == 1 && bal_after(@Result<Nat, String>.0, 0) == 0 then { 1 } else { 0 };  -- t10
+
+  -- Case 11: deposit 0 => rejected, balance unchanged (0)
+  let @Result<Nat, String> = deposit(0, 0);
+  let @Nat = if check_err(@Result<Nat, String>.0) == 1 && bal_after(@Result<Nat, String>.0, 0) == 0 then { 1 } else { 0 };  -- t11
+
+  -- Case 12: withdraw 0 => rejected, balance unchanged (0)
+  let @Result<Nat, String> = withdraw(0, 0);
+  let @Nat = if check_err(@Result<Nat, String>.0) == 1 && bal_after(@Result<Nat, String>.0, 0) == 0 then { 1 } else { 0 };  -- t12
+
+  -- Case 13: invariant never negative. Balance is a Nat: non-negative by type.
+  -- Demonstrate across a sequence that the result stays >= 0 (always true for Nat).
+  let @Nat = bal_after(withdraw(20, 5), 20);
+  let @Nat = if @Nat.0 >= 0 then { 1 } else { 0 };    -- t13
+
+  -- Case 14: each error case leaves balance unchanged (verified per case above).
+  -- Re-confirm one representative: withdraw too much keeps balance.
+  let @Result<Nat, String> = withdraw(70, 200);
+  let @Nat = if bal_after(@Result<Nat, String>.0, 70) == 70 then { 1 } else { 0 };  -- t14
+
+  -- Sum all 14 test indicators. Slot stack (most-recent first):
+  -- t14 .0, t13 .1, t12 .2, t11 .3, t10 .4, t9 .5, t8 .6, t7 .7,
+  -- t6 .8, t5 .9, t4 .10, t3 .11, t2 .12, t1 .13
+  let @Nat = @Nat.0 + @Nat.1 + @Nat.2 + @Nat.3 + @Nat.4 + @Nat.5 + @Nat.6
+           + @Nat.7 + @Nat.8 + @Nat.9 + @Nat.10 + @Nat.11 + @Nat.12 + @Nat.13;
+
+  IO.print(string_concat("PASS ", string_concat(nat_to_string(@Nat.0), "/14\n")))
+}

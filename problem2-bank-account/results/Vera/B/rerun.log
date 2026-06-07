@@ -1,0 +1,10 @@
+## condition: Vera/B
+## command: indir problem2-bank-account/results/Vera/B vera run attempt_2.vera && echo '--- vera verify ---' && vera verify attempt_2.vera
+## date(host): 2026-06-07T14:01:22Z
+----- stdout+stderr -----
+PASS 14/14
+--- vera verify ---
+OK: attempt_2.vera
+Verification: 42 verified (Tier 1)
+----- exit code -----
+0

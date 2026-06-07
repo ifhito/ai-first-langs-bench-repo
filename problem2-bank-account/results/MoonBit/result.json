@@ -1,0 +1,45 @@
+{
+  "language": "MoonBit",
+  "conditions": {
+    "A": {
+      "status": "DONE",
+      "pass_at_1": true,
+      "fix_rounds": 0,
+      "final_pass_count": "14/14",
+      "loc": 28,
+      "tokens": 203,
+      "self_recovered": true,
+      "error_quality": "free/typed - two-variant suberror BankError (NonPositiveAmount, InsufficientFunds) via the typed raise effect; only a non-fatal derive(Show) deprecation warning. No fix needed (pass@1).",
+      "notes": "Invariant enforcement = AI hand-written guards. balance is a plain `mut Int`; nothing structural prevents negatives. deposit/withdraw raise before mutating (amount<=0; amount>balance), so balance stays >=0 and unchanged on error. The type system forces error handling (raise BankError effect must be discharged) but does not prove non-negativity.",
+      "attempts": [{"attempt": 1, "pass_count": 14, "failed_cases": []}],
+      "raw_error_excerpts": ["Warning [0027] derive(Show) deprecated -> derive(Debug) (non-fatal; 14/14 already)"],
+      "toolchain_notes": "moon 0.1.20260529. Scaffold `moon new bankaccount` (KDL-style moon.mod/moon.pkg). 14 blackbox tests in bankaccount_test.mbt. Run: cd bankaccount && moon test. NO guide consulted; syntax from prior knowledge.",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "cd bankaccount && moon test", "result": "Total tests: 14, passed: 14, failed: 0"}
+    },
+    "B": {
+      "status": "DONE",
+      "pass_at_1": false,
+      "fix_rounds": 2,
+      "final_pass_count": "14/14",
+      "loc": 27,
+      "tokens": 187,
+      "self_recovered": true,
+      "error_quality": "structured - suberror AccountError with NonPositiveAmount(Int)/InsufficientFunds(balance, requested) via raise; error [3016] named the exact labelled-arg syntax fix.",
+      "notes": "Invariant enforcement = AI hand-written guards. balance is a plain `mut Int` (no refinement/contract). guard clauses reject amount<=0 and amount>balance, raising before any mutation; only subtraction is gated, so balance never goes <0 and is unchanged on error. Compiler does not prove the invariant.",
+      "attempts": [
+        {"attempt": 1, "pass_count": 0, "failed_cases": ["[3016] invalid labelled-arg syntax `name~=..` (should be `name=..`)"]},
+        {"attempt": 2, "pass_count": 14, "failed_cases": []},
+        {"attempt": 3, "pass_count": 14, "failed_cases": ["(only warning cleanup)"]}
+      ],
+      "raw_error_excerpts": [
+        "Error [3016] The syntax `balance~=..` for supplying labelled argument is invalid, use `balance=..`",
+        "Total tests: 14, passed: 14, failed: 0."
+      ],
+      "toolchain_notes": "moon 0.1.20260529. Guide fetch https://docs.moonbitlang.com/llms.txt -> HTTP 404; fell back to toolchain-as-guide (moon help + fresh `moon new` scaffold + moon test diagnostics). Run: cd bankacct && moon test.",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "cd bankacct && moon test", "result": "Total tests: 14, passed: 14, failed: 0"}
+    }
+  },
+  "status": "DONE"
+}

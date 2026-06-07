@@ -1,0 +1,153 @@
+-- Bank account in Vera (Pattern A: syntax recovered from compiler diagnostics).
+--
+-- Model:
+--   * A balance is a non-negative integer (Int).
+--   * deposit / withdraw return an Outcome: Ok(newBalance) on success, Err on a
+--     rejected operation.
+--   * `settle(balance, outcome)` yields the next balance: Ok -> new value,
+--     Err -> the previous balance (unchanged). Its `ensures` contract proves the
+--     resulting balance is always >= 0, so a rejected op never leaves it invalid.
+
+public data Outcome { Ok(Int), Err }
+
+-- deposit(balance, amount): amount must be a positive integer.
+public fn deposit(@Int, @Int -> @Outcome)
+  requires(@Int.1 >= 0)
+  ensures(true)
+  effects(pure)
+{
+  if @Int.0 > 0 then {
+    Ok(@Int.1 + @Int.0)
+  } else {
+    Err
+  }
+}
+
+-- withdraw(balance, amount): amount positive and not exceeding balance.
+public fn withdraw(@Int, @Int -> @Outcome)
+  requires(@Int.1 >= 0)
+  ensures(true)
+  effects(pure)
+{
+  if @Int.0 > 0 && @Int.0 <= @Int.1 then {
+    Ok(@Int.1 - @Int.0)
+  } else {
+    Err
+  }
+}
+
+-- settle(balance, outcome) -> next balance (Err keeps the old, verified >= 0).
+public fn settle(@Int, @Outcome -> @Int)
+  requires(@Int.0 >= 0)
+  ensures(@Int.result >= 0)
+  effects(pure)
+{
+  match @Outcome.0 {
+    Ok(@Int) -> @Int.0,
+    Err -> @Int.0
+  }
+}
+
+-- is_err(outcome) -> 1 if rejected, else 0.
+public fn is_err(@Outcome -> @Int)
+  requires(true)
+  ensures(@Int.result >= 0)
+  effects(pure)
+{
+  match @Outcome.0 {
+    Ok(@Int) -> 0,
+    Err -> 1
+  }
+}
+
+-- check(label, actual, expected) -> 1 if actual == expected else 0; prints result.
+public fn check(@String, @Int, @Int -> @Int)
+  requires(true)
+  ensures(@Int.result >= 0)
+  effects(<IO>)
+{
+  if @Int.1 == @Int.0 then {
+    IO.print(@String.0);
+    1
+  } else {
+    IO.print(@String.0);
+    0
+  }
+}
+
+-- check_err(label, origBalance, outcome, expectedBalance) -> 1 if the op was
+-- rejected AND the settled balance equals the (unchanged) expected balance.
+public fn check_err(@String, @Int, @Outcome, @Int -> @Int)
+  requires(@Int.1 >= 0)
+  ensures(@Int.result >= 0)
+  effects(<IO>)
+{
+  if is_err(@Outcome.0) == 1 && settle(@Int.1, @Outcome.0) == @Int.0 then {
+    IO.print(@String.0);
+    1
+  } else {
+    IO.print(@String.0);
+    0
+  }
+}
+
+public fn main(@Unit -> @Unit)
+  requires(true)
+  ensures(true)
+  effects(<IO>)
+{
+  -- @Int stack is used as the running pass counter; @Int.0 is the latest count.
+  let @Int = 0;
+
+  -- ===== SUCCESS cases: compare final balance =====
+  -- 1: fresh => 0
+  let @Int = @Int.0 + check("case01 fresh => 0", settle(0, Ok(0)), 0);
+  -- 2: dep100 => 100
+  let @Int = @Int.0 + check("case02 dep100 => 100", settle(0, deposit(0, 100)), 100);
+  -- 3: dep100, dep50 => 150
+  let @Int = @Int.0 + check("case03 dep100 dep50 => 150",
+                            settle(settle(0, deposit(0, 100)), deposit(100, 50)), 150);
+  -- 4: dep100, wd30 => 70
+  let @Int = @Int.0 + check("case04 dep100 wd30 => 70",
+                            settle(settle(0, deposit(0, 100)), withdraw(100, 30)), 70);
+  -- 5: dep100, wd100 => 0
+  let @Int = @Int.0 + check("case05 dep100 wd100 => 0",
+                            settle(settle(0, deposit(0, 100)), withdraw(100, 100)), 0);
+  -- 6: dep50, dep50, wd80 => 20
+  let @Int = @Int.0 + check("case06 dep50 dep50 wd80 => 20",
+                            settle(settle(settle(0, deposit(0, 50)), deposit(50, 50)),
+                                   withdraw(100, 80)), 20);
+
+  -- ===== ERROR cases: rejected AND balance unchanged =====
+  -- 7: fresh, wd10 => rejected, stays 0
+  let @Int = @Int.0 + check_err("case07 fresh wd10 rejected, stays 0",
+                                0, withdraw(0, 10), 0);
+  -- 8: dep100, wd101 => rejected, stays 100
+  let @Int = @Int.0 + check_err("case08 dep100 wd101 rejected, stays 100",
+                                100, withdraw(100, 101), 100);
+  -- 9: dep(-50) => rejected, stays 0
+  let @Int = @Int.0 + check_err("case09 dep(-50) rejected, stays 0",
+                                0, deposit(0, 0 - 50), 0);
+  -- 10: wd(-50) => rejected, stays 0
+  let @Int = @Int.0 + check_err("case10 wd(-50) rejected, stays 0",
+                                0, withdraw(0, 0 - 50), 0);
+  -- 11: dep(0) => rejected, stays 0
+  let @Int = @Int.0 + check_err("case11 dep(0) rejected, stays 0",
+                                0, deposit(0, 0), 0);
+  -- 12: wd(0) => rejected, stays 0
+  let @Int = @Int.0 + check_err("case12 wd(0) rejected, stays 0",
+                                0, withdraw(0, 0), 0);
+
+  -- ===== INVARIANT cases =====
+  -- 13: balance never negative (every settle above is proven >= 0 by its ensures).
+  --     Demonstrate: wd more than balance leaves a non-negative balance.
+  let @Int = @Int.0 + check("case13 invariant: balance never negative",
+                            settle(20, withdraw(20, 999)), 20);
+  -- 14: each error case left the balance unchanged (re-verify one composite path).
+  let @Int = @Int.0 + check_err("case14 error leaves balance unchanged",
+                                70, withdraw(70, 71), 70);
+
+  IO.print("PASS");
+  IO.print(int_to_string(@Int.0));
+  IO.print("out of 14")
+}

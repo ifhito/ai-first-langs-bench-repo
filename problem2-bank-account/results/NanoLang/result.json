@@ -1,0 +1,52 @@
+{
+  "language": "NanoLang",
+  "conditions": {
+    "A": {
+      "status": "DONE",
+      "pass_at_1": true,
+      "fix_rounds": 0,
+      "final_pass_count": "14/14",
+      "loc": 152,
+      "tokens": 1233,
+      "error_channel": "sum-type",
+      "self_recovered": true,
+      "error_quality": "structured - typed named diagnostics with line/caret/hints; 'Expected { after variant name (got LPAREN)' revealed that union variants carry payload, unlocking the Result-like error channel.",
+      "notes": "Pattern A (spec + testcases + rubric only; NO grammar guide, NO other solutions read). Error channel = payload-carrying union 'union OpResult { Ok { balance: int } Err { code: int } }'; deposit/withdraw return OpResult and the Err variant is the rejection signal (callers branch via is_err()/match, not a print). Harness for #7-#12 asserts BOTH is_err==1 AND balance unchanged. Invariant balance>=0 enforced by hand-written guards + the type-distinct error channel (not a language-verified contract). Syntax (incl. the payload-union discovery) recovered purely from interpreter diagnostics on throwaway probes. Independently verified by the report author: source inspected + container re-run twice, deterministic 'TOTAL_PASSED 14', exit 0.",
+      "attempts": [{"attempt": 1, "pass_count": 14, "failed_cases": []}],
+      "raw_error_excerpts": [
+        "Expected '->' after parameters (got LBRACE) -- fn needs explicit return type",
+        "Hint: use (function_name args) / to assign use set -- Lisp-style calls + set",
+        "Expected '{' after variant name (got LPAREN) -- union variant payload uses braces (Result-like channel is possible)",
+        "Expected '(' after variant name in match -- match binds variant payload with (binding)",
+        "Cannot determine struct type for field access -- nested struct payload not resolvable -> primitive int payloads"
+      ],
+      "toolchain_notes": "nanolang interpreter (tree-walk). Run: nanolang attempt_1.nano. NO docs/README/examples or other results/ solutions read (Pattern A); syntax recovered from prior knowledge + interpreter errors via throwaway probe files.",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "nanolang attempt_1.nano", "result": "TOTAL_PASSED 14, exit=0 (deterministic over 2 independent re-runs by report author)"}
+    },
+    "B": {
+      "status": "DONE",
+      "pass_at_1": false,
+      "fix_rounds": 1,
+      "final_pass_count": "14/14",
+      "loc": 245,
+      "tokens": 1274,
+      "self_recovered": true,
+      "error_quality": "free - deposit/withdraw return Result<Account,string> (Ok{value}/Err{error}); rejection carries a descriptive message; caller pattern-matches.",
+      "notes": "Invariant enforcement = AI hand-written checks + immutable structure. Account is an immutable struct {balance:int}; deposit/withdraw are pure functions returning Result: Ok carries a NEW Account, Err keeps the OLD one, so error cannot corrupt state. withdraw rejects amount>balance before constructing the new account; both reject amount<=0, so a new Account is only built with balance>=0. Statically typed and shadow tests ran, but the >=0 invariant is enforced by explicit guards, not a refinement type.",
+      "attempts": [
+        {"attempt": 1, "pass_count": 0, "failed_cases": ["module import failed: 'modules/std/result.nano' not found (stdlib path not resolvable from output cwd)"]},
+        {"attempt": 2, "pass_count": 14, "failed_cases": []}
+      ],
+      "raw_error_excerpts": [
+        "attempt_1: Module file 'modules/std/result.nano' not found; module loading failed",
+        "attempt_2: Warning Unused variable 'e'/'v'; PASS 14/14"
+      ],
+      "toolchain_notes": "Guide files read from /opt/nanolang: README.md, docs/QUICK_REFERENCE.md, docs/ERROR_HANDLING.md, docs/SHADOW_TESTS.md, examples (result_api.nano, vector2d_api.nano, nl_mutable.nano). Fix: replaced unresolvable stdlib import with a local `union Result<T,E>`. Run: nanolang attempt_2.nano.",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "nanolang attempt_2.nano", "result": "PASS 14/14"}
+    }
+  },
+  "status": "DONE",
+  "status_note": "A=DONE (14/14, sum-type error channel OpResult{Ok|Err}), B=DONE (14/14, Result<Account,string>). Both verified against RUBRIC.md (error cases require a caller-distinguishable rejection signal that the harness checks). See results/REGRADE.md."
+}

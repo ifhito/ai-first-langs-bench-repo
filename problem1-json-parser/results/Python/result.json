@@ -1,0 +1,29 @@
+{
+  "language": "Python",
+  "conditions": {
+    "A": {
+      "status": "DONE",
+      "pass_at_1": true,
+      "fix_rounds": 0,
+      "final_pass_count": "22/22",
+      "loc": 169,
+      "tokens": 523,
+      "self_recovered": false,
+      "error_quality": "poor - no errors occurred since the implementation passed all 22 cases on the first attempt, so error output was not relevant to driving any fix.",
+      "notes": "Hand-rolled recursive-descent JSON parser using a custom JSONParseError exception (no stdlib json). All 22 cases (13 success deep-equality, 9 error) passed on first run; number parsing correctly rejects leading zero (01), trailing dot (1.), and bare fraction (.5).",
+      "attempts": [
+        {
+          "attempt": 1,
+          "pass_count": 22,
+          "failed_cases": []
+        }
+      ],
+      "raw_error_excerpts": [],
+      "toolchain_notes": "Wrote /Users/hotake/Documents/ai-lang-bench-repo/problem1-json-parser/results/Python/A/main.py and test_harness.py on host. Ran: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem1-json-parser/results/Python/A ai-lang-bench python3 test_harness.py  (container python3 3.13.5). Verified interpreter with: docker run --rm ai-lang-bench python3 --version.",
+      "pass_basis": "value",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "python3 test_harness.py", "result": "PASS 22/22"}
+    }
+  },
+  "status": "DONE"
+}

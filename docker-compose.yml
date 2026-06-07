@@ -1,0 +1,18 @@
+# Convenience wrapper around the benchmark image.
+#
+#   docker compose build          # build the image (pinned toolchains)
+#   docker compose run --rm bench # interactive shell with every toolchain
+#   docker compose run --rm bench scripts/run_bench_tests.sh
+#
+# The repo is bind-mounted so generated results/ land on the host.
+services:
+  bench:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai-lang-bench
+    working_dir: /bench
+    volumes:
+      - .:/bench
+    stdin_open: true
+    tty: true

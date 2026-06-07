@@ -13,7 +13,12 @@ node_modules/
 __pycache__/
 *.pyc
 target/
+_build/
+.zero/
+.mooncakes/
+.moonagent/
 
 # ベンチマーク実行物（必要なら残す。デフォルトでは生成コードはコミット可、ゴミだけ除外）
 *.log
+!**/rerun.log
 tmp/

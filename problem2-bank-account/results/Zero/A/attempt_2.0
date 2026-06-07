@@ -1,0 +1,178 @@
+// Bank account in Zero (zerolang).
+//
+// Spec: deposit(amount) / withdraw(amount) / balance().
+//   - initial balance is 0
+//   - amounts must be POSITIVE INTEGERS (<= 0 is rejected as an error)
+//   - a withdrawal exceeding the balance is rejected (balance unchanged)
+//   - balance is always >= 0 before and after every operation
+//
+// The account state is just the current balance, an i64 that is held by
+// the caller (value semantics). Because a valid balance is always >= 0,
+// the operation functions report an error by returning a negative
+// sentinel (-1). The caller treats a negative result as "rejected,
+// keep the previous balance", which makes it impossible to leave the
+// account in an invalid (negative) state.
+
+// The error sentinel is the literal -1. The direct backend MVP only
+// supports top-level function declarations, so there is no module const.
+
+// deposit returns the new balance, or -1 if amount is not positive.
+fn deposit(bal: i64, amount: i64) -> i64 {
+    if amount <= 0 {
+        return -1
+    }
+    return bal + amount
+}
+
+// withdraw returns the new balance, or -1 if amount is not positive
+// or exceeds the available balance.
+fn withdraw(bal: i64, amount: i64) -> i64 {
+    if amount <= 0 {
+        return -1
+    }
+    if amount > bal {
+        return -1
+    }
+    return bal - amount
+}
+
+// apply takes the current balance and a proposed result; if the result
+// is an error (negative) the original balance is kept unchanged.
+fn apply(bal: i64, result: i64) -> i64 {
+    if result < 0 {
+        return bal
+    }
+    return result
+}
+
+export c fn main() -> i64 {
+    var passed: i64 = 0
+
+    // Case 1: fresh account => 0
+    let b1: i64 = 0
+    if b1 == 0 {
+        passed = passed + 1
+    }
+
+    // Case 2: deposit 100 => 100
+    var b2: i64 = 0
+    b2 = apply(b2, deposit(b2, 100))
+    if b2 == 100 {
+        passed = passed + 1
+    }
+
+    // Case 3: deposit 100, deposit 50 => 150
+    var b3: i64 = 0
+    b3 = apply(b3, deposit(b3, 100))
+    b3 = apply(b3, deposit(b3, 50))
+    if b3 == 150 {
+        passed = passed + 1
+    }
+
+    // Case 4: deposit 100, withdraw 30 => 70
+    var b4: i64 = 0
+    b4 = apply(b4, deposit(b4, 100))
+    b4 = apply(b4, withdraw(b4, 30))
+    if b4 == 70 {
+        passed = passed + 1
+    }
+
+    // Case 5: deposit 100, withdraw 100 => 0
+    var b5: i64 = 0
+    b5 = apply(b5, deposit(b5, 100))
+    b5 = apply(b5, withdraw(b5, 100))
+    if b5 == 0 {
+        passed = passed + 1
+    }
+
+    // Case 6: deposit 50, deposit 50, withdraw 80 => 20
+    var b6: i64 = 0
+    b6 = apply(b6, deposit(b6, 50))
+    b6 = apply(b6, deposit(b6, 50))
+    b6 = apply(b6, withdraw(b6, 80))
+    if b6 == 20 {
+        passed = passed + 1
+    }
+
+    // Case 7: fresh, withdraw 10 => rejected, balance 0
+    var b7: i64 = 0
+    let r7: i64 = withdraw(b7, 10)
+    b7 = apply(b7, r7)
+    if r7 < 0 && b7 == 0 {
+        passed = passed + 1
+    }
+
+    // Case 8: deposit 100, withdraw 101 => rejected, balance 100
+    var b8: i64 = 0
+    b8 = apply(b8, deposit(b8, 100))
+    let r8: i64 = withdraw(b8, 101)
+    b8 = apply(b8, r8)
+    if r8 < 0 && b8 == 100 {
+        passed = passed + 1
+    }
+
+    // Case 9: deposit -50 => rejected, balance 0
+    var b9: i64 = 0
+    let r9: i64 = deposit(b9, -50)
+    b9 = apply(b9, r9)
+    if r9 < 0 && b9 == 0 {
+        passed = passed + 1
+    }
+
+    // Case 10: withdraw -50 => rejected, balance 0
+    var b10: i64 = 0
+    let r10: i64 = withdraw(b10, -50)
+    b10 = apply(b10, r10)
+    if r10 < 0 && b10 == 0 {
+        passed = passed + 1
+    }
+
+    // Case 11: deposit 0 => rejected, balance 0
+    var b11: i64 = 0
+    let r11: i64 = deposit(b11, 0)
+    b11 = apply(b11, r11)
+    if r11 < 0 && b11 == 0 {
+        passed = passed + 1
+    }
+
+    // Case 12: withdraw 0 => rejected, balance 0
+    var b12: i64 = 0
+    let r12: i64 = withdraw(b12, 0)
+    b12 = apply(b12, r12)
+    if r12 < 0 && b12 == 0 {
+        passed = passed + 1
+    }
+
+    // Case 13: invariant, balance never negative across a sequence
+    var b13: i64 = 0
+    var ok13: Bool = true
+    b13 = apply(b13, deposit(b13, 100))
+    if b13 < 0 {
+        ok13 = false
+    }
+    b13 = apply(b13, withdraw(b13, 100))
+    if b13 < 0 {
+        ok13 = false
+    }
+    b13 = apply(b13, withdraw(b13, 50))
+    if b13 < 0 {
+        ok13 = false
+    }
+    if ok13 && b13 == 0 {
+        passed = passed + 1
+    }
+
+    // Case 14: each error case leaves the balance unchanged
+    var b14: i64 = 0
+    b14 = apply(b14, deposit(b14, 100))
+    let before: i64 = b14
+    b14 = apply(b14, withdraw(b14, 9999))
+    b14 = apply(b14, deposit(b14, -1))
+    b14 = apply(b14, deposit(b14, 0))
+    if b14 == before {
+        passed = passed + 1
+    }
+
+    // Return the number of passed cases as the process exit code.
+    return passed
+}

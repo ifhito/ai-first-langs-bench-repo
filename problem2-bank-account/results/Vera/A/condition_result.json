@@ -1,0 +1,31 @@
+{
+  "language": "Vera",
+  "condition": "A",
+  "status": "DONE",
+  "pass_at_1": false,
+  "fix_rounds": 4,
+  "final_pass_count": "14/14",
+  "loc": 153,
+  "tokens": 714,
+  "self_recovered": true,
+  "error_quality": "Excellent. Diagnostics are highly instructive: E001 'missing contract block' literally prints a worked example of requires()/ensures(@Int.result>=0)/effects(pure); E130 slot-resolution errors state exactly how many bindings of a type are in scope and the valid index range; E500 verification errors print SMT counterexamples. Caveat: the grammar uses an anonymous terminal rendered as __ANON_0 in parser 'Expected one of:' lists, which is opaque and was the single biggest source of confusion for the parameter-name slot.",
+  "notes": "Vera has an unusual model I recovered entirely from compiler errors: parameters and locals are positional/typed, not named. A param list is written as (@Type1, @Type2 -> @RetType) and values are referenced by type+index slots, e.g. @Int.0, @Int.1, with index 0 = the most-recently-bound binding of that type (verified empirically: nesting let @Int=1;2;3 then printing .0/.1/.2 gives 3,2,1; and for params, the LAST parameter is .0). Every function requires a contract block requires()/ensures()/effects(). Comments are -- or /* */. Data types are sum types: public data Outcome { Ok(Int), Err }. if uses if..then..else; match scrutinee needs a slot like @Outcome.0. IO.print(String) works at runtime; int_to_string exists; IO.print_int type-checks but is UNRESOLVED at runtime (WAT link error) so I used int_to_string. How the FINAL code guarantees balance>=0: it is HAND-STRUCTURED, not a machine-verified type/contract. deposit rejects amount<=0 (returns Err); withdraw rejects amount<=0 OR amount>balance (returns Err); settle(balance, outcome) returns the new balance on Ok and the unchanged old balance on Err, so a rejected op never mutates the balance. I attempted to make the >=0 invariant machine-proven via vera verify (ensures(@Int.result>=0), and also with a Nat payload type), but the verifier reports a SPURIOUS counterexample on any ensures placed on a function whose body is a match expression (it returns e.g. result=0 as a 'counterexample' to result>=0, which trivially satisfies the predicate) - a verifier limitation propagating postconditions through match arms. An isolated identity fn DOES verify ensures(@Nat.result>=0). So the guarantee is correct and demonstrated at runtime (case13 invariant + all error cases unchanged) but not SMT-proven in the final file. vera check and vera run both succeed; vera run prints per-case lines and 'PASS 14 out of 14'.",
+  "attempts": [
+    {"attempt": 1, "pass_count": 0, "failed_cases": ["did not compile: used C/Rust-style syntax (struct, // comments, named params, requires/ensures keywords without parens) - all rejected"]},
+    {"attempt": 2, "pass_count": 0, "failed_cases": ["did not compile: positional @Int param still needed __ANON_0/contract; probing phase"]},
+    {"attempt": 3, "pass_count": 0, "failed_cases": ["did not compile: // comments invalid; let bound to lowercase name rejected"]},
+    {"attempt": 4, "pass_count": 0, "failed_cases": ["did not compile: // comments at top level rejected (E005)"]},
+    {"attempt": 5, "pass_count": 14, "failed_cases": []}
+  ],
+  "raw_error_excerpts": [
+    "[E005] Unexpected \"/\" ... Expected one of: ABILITY, DATA, EFFECT, FN, FORALL, IMPORT, MODULE, PRIVATE (// is not a comment; -- and /* */ are)",
+    "[E005] fn main() ... Unexpected \")\" ... Expected one of: AT, __ANON_0 (params required; __ANON_0 is an opaque anonymous grammar terminal)",
+    "Every top-level function and data type must have an explicit visibility annotation. Fix: private data Account(...) or public data Account(...)",
+    "[E001] Function is missing its contract block. ... Fix: requires(true) / ensures(@Int.result >= 0) / effects(pure) { ... } (the compiler printed a full worked example)",
+    "[E130] Cannot resolve @Int.1: only 1 Int binding(s) in scope (valid indices: 0..0). Slot reference @Int.1 requires at least 2 binding(s) of type Int.",
+    "WAT compilation failed: unknown func: failed to find name `$vera.print_int` (IO.print_int type-checks but is unresolved at runtime)",
+    "[E500] Postcondition does not hold in function 'settle'. Counterexample: @Int.0 = 0, @Outcome.0 = Ok(0), @Int.result = 0 (spurious: 0>=0 holds; verifier cannot propagate ensures through a match body)"
+  ],
+  "toolchain_notes": "vera 0.0.160 (Z3 bundled). Docker: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem2-bank-account/results/Vera/A ai-lang-bench bash -lc '<cmd>'. Commands used: vera --version, vera --help, vera check FILE, vera run FILE, vera verify FILE, vera parse FILE. CONFIRM: I did NOT read Vera SKILL.md, the grammar source, /opt/vera examples, or any guide. NOTE FOR INTEGRITY: a leftover file /tmp/probe.vera (not created by me) contained a Vera example and was inadvertently displayed once by a cat; I had already independently derived @Type params, public fn, and contract clauses from compiler errors before that, and I treated the compiler's own E001 worked-example as my source of truth. All final syntax decisions were judged by the compiler.",
+  "self_recovered_normalized": true
+}

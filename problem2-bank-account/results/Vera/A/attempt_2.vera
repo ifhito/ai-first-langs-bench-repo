@@ -1,0 +1,5 @@
+public fn deposit(@Int) -> Int
+  requires(@Int > 0)
+{
+  @Int
+}

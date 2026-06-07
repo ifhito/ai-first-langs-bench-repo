@@ -1,0 +1,522 @@
+# JSON parser for NanoLang (Pattern B - guide-fed).
+# Hand-written recursive-descent parser. No stdlib JSON used.
+# Parsing produces a canonical, unambiguous string encoding of the value.
+# Errors are signalled via an error cell (List<int>, slot 0 = 1 on error),
+# never by crashing the interpreter.
+
+# ---- Position / error cells -------------------------------------------------
+# We thread the cursor and an error flag through List<int> cells, because
+# struct-field assignment (`set s.f`) is not supported; lists are by-reference.
+
+fn cell_get(c: List<int>) -> int {
+    return (list_int_get c 0)
+}
+
+shadow cell_get {
+    let c: List<int> = (list_int_new)
+    (list_int_push c 7)
+    assert (== (cell_get c) 7)
+}
+
+fn cell_set(c: List<int>, v: int) -> int {
+    (list_int_set c 0 v)
+    return v
+}
+
+shadow cell_set {
+    let c: List<int> = (list_int_new)
+    (list_int_push c 0)
+    (cell_set c 9)
+    assert (== (cell_get c) 9)
+}
+
+# ---- Character helpers ------------------------------------------------------
+
+fn peek(s: string, pos: List<int>) -> int {
+    let i: int = (cell_get pos)
+    if (>= i (str_length s)) {
+        return -1
+    }
+    return (char_at s i)
+}
+
+shadow peek {
+    let p: List<int> = (list_int_new)
+    (list_int_push p 0)
+    assert (== (peek "ab" p) 97)
+    let q: List<int> = (list_int_new)
+    (list_int_push q 2)
+    assert (== (peek "ab" q) -1)
+}
+
+fn advance(pos: List<int>) -> int {
+    let i: int = (cell_get pos)
+    (cell_set pos (+ i 1))
+    return i
+}
+
+shadow advance {
+    let p: List<int> = (list_int_new)
+    (list_int_push p 3)
+    (advance p)
+    assert (== (cell_get p) 4)
+}
+
+fn skip_ws(s: string, pos: List<int>) -> int {
+    let mut go: bool = true
+    while go {
+        let c: int = (peek s pos)
+        if (or (or (== c 32) (== c 9)) (or (== c 10) (== c 13))) {
+            (advance pos)
+        } else {
+            set go false
+        }
+    }
+    return 0
+}
+
+shadow skip_ws {
+    let p: List<int> = (list_int_new)
+    (list_int_push p 0)
+    (skip_ws "   x" p)
+    assert (== (cell_get p) 3)
+}
+
+# ---- String parsing ---------------------------------------------------------
+# Assumes the opening quote has already been consumed.
+# Handles escapes \" \\ \n. Returns decoded content; sets err on bad input.
+
+fn parse_string_body(s: string, pos: List<int>, err: List<int>) -> string {
+    let mut out: string = ""
+    let mut done: bool = false
+    while (not done) {
+        let c: int = (peek s pos)
+        if (== c -1) {
+            (cell_set err 1)
+            set done true
+        } else {
+            if (== c 34) {
+                # closing quote
+                (advance pos)
+                set done true
+            } else {
+                if (== c 92) {
+                    # backslash: consume it, inspect next
+                    (advance pos)
+                    let e: int = (peek s pos)
+                    if (== e 34) {
+                        set out (str_concat out "\"")
+                        (advance pos)
+                    } else {
+                        if (== e 92) {
+                            set out (str_concat out "\\")
+                            (advance pos)
+                        } else {
+                            if (== e 110) {
+                                set out (str_concat out "\n")
+                                (advance pos)
+                            } else {
+                                (cell_set err 1)
+                                set done true
+                            }
+                        }
+                    }
+                } else {
+                    set out (str_concat out (string_from_char c))
+                    (advance pos)
+                }
+            }
+        }
+    }
+    return out
+}
+
+shadow parse_string_body {
+    let p: List<int> = (list_int_new)
+    (list_int_push p 0)
+    let e: List<int> = (list_int_new)
+    (list_int_push e 0)
+    let r: string = (parse_string_body "hi\"" p e)
+    assert (== r "hi")
+    assert (== (cell_get e) 0)
+}
+
+# ---- Number parsing ---------------------------------------------------------
+# Validates JSON number grammar (integer or decimal, optional leading '-').
+# No leading zeros (01 invalid), digits required after '.' (1. invalid),
+# digit required before '.' (.5 invalid). Returns canonical "int:N"/"float:X".
+
+fn parse_number(s: string, pos: List<int>, err: List<int>) -> string {
+    let mut tok: string = ""
+    let mut is_float: bool = false
+
+    # optional minus
+    if (== (peek s pos) 45) {
+        set tok (str_concat tok "-")
+        (advance pos)
+    }
+
+    let first: int = (peek s pos)
+    if (not (is_digit first)) {
+        (cell_set err 1)
+        return ""
+    }
+
+    if (== first 48) {
+        # leading zero: must be exactly "0" (no other digit may follow)
+        set tok (str_concat tok "0")
+        (advance pos)
+    } else {
+        let mut go: bool = true
+        while go {
+            let c: int = (peek s pos)
+            if (is_digit c) {
+                set tok (str_concat tok (string_from_char c))
+                (advance pos)
+            } else {
+                set go false
+            }
+        }
+    }
+
+    # optional fractional part
+    if (== (peek s pos) 46) {
+        set is_float true
+        set tok (str_concat tok ".")
+        (advance pos)
+        let after: int = (peek s pos)
+        if (not (is_digit after)) {
+            (cell_set err 1)
+            return ""
+        }
+        let mut go2: bool = true
+        while go2 {
+            let c: int = (peek s pos)
+            if (is_digit c) {
+                set tok (str_concat tok (string_from_char c))
+                (advance pos)
+            } else {
+                set go2 false
+            }
+        }
+    }
+
+    if is_float {
+        return (str_concat "float:" tok)
+    }
+    return (str_concat "int:" tok)
+}
+
+shadow parse_number {
+    let p: List<int> = (list_int_new)
+    (list_int_push p 0)
+    let e: List<int> = (list_int_new)
+    (list_int_push e 0)
+    assert (== (parse_number "42" p e) "int:42")
+}
+
+# ---- Literal matching (null/true/false) ------------------------------------
+
+fn match_literal(s: string, pos: List<int>, lit: string) -> bool {
+    let i: int = (cell_get pos)
+    let ln: int = (str_length lit)
+    if (> (+ i ln) (str_length s)) {
+        return false
+    }
+    let mut k: int = 0
+    while (< k ln) {
+        if (!= (char_at s (+ i k)) (char_at lit k)) {
+            return false
+        }
+        set k (+ k 1)
+    }
+    (cell_set pos (+ i ln))
+    return true
+}
+
+shadow match_literal {
+    let p: List<int> = (list_int_new)
+    (list_int_push p 0)
+    assert (== (match_literal "null" p "null") true)
+    assert (== (cell_get p) 4)
+}
+
+# ---- Value parsing (recursive) ---------------------------------------------
+
+fn parse_value(s: string, pos: List<int>, err: List<int>) -> string {
+    (skip_ws s pos)
+    if (== (cell_get err) 1) {
+        return ""
+    }
+    let c: int = (peek s pos)
+
+    if (== c -1) {
+        (cell_set err 1)
+        return ""
+    }
+
+    # string
+    if (== c 34) {
+        (advance pos)
+        let body: string = (parse_string_body s pos err)
+        if (== (cell_get err) 1) {
+            return ""
+        }
+        return (str_concat "str:" body)
+    }
+
+    # array
+    if (== c 91) {
+        return (parse_array s pos err)
+    }
+
+    # object
+    if (== c 123) {
+        return (parse_object s pos err)
+    }
+
+    # number (digit or minus)
+    if (or (is_digit c) (== c 45)) {
+        return (parse_number s pos err)
+    }
+
+    # literals
+    if (== c 110) {
+        if (match_literal s pos "null") {
+            return "null"
+        }
+        (cell_set err 1)
+        return ""
+    }
+    if (== c 116) {
+        if (match_literal s pos "true") {
+            return "true"
+        }
+        (cell_set err 1)
+        return ""
+    }
+    if (== c 102) {
+        if (match_literal s pos "false") {
+            return "false"
+        }
+        (cell_set err 1)
+        return ""
+    }
+
+    (cell_set err 1)
+    return ""
+}
+
+shadow parse_value {
+    let p: List<int> = (list_int_new)
+    (list_int_push p 0)
+    let e: List<int> = (list_int_new)
+    (list_int_push e 0)
+    assert (== (parse_value "null" p e) "null")
+}
+
+fn parse_array(s: string, pos: List<int>, err: List<int>) -> string {
+    (advance pos)
+    # consume '['
+    (skip_ws s pos)
+    let mut out: string = "arr["
+    # empty array
+    if (== (peek s pos) 93) {
+        (advance pos)
+        return (str_concat out "]")
+    }
+    let mut go: bool = true
+    let mut first: bool = true
+    while go {
+        let elem: string = (parse_value s pos err)
+        if (== (cell_get err) 1) {
+            set go false
+            return ""
+        }
+        if first {
+            set out (str_concat out elem)
+            set first false
+        } else {
+            set out (str_concat out (str_concat "|" elem))
+        }
+        (skip_ws s pos)
+        let c: int = (peek s pos)
+        if (== c 44) {
+            # comma: continue (trailing comma will fail on next parse_value)
+            (advance pos)
+            (skip_ws s pos)
+        } else {
+            if (== c 93) {
+                (advance pos)
+                set go false
+            } else {
+                (cell_set err 1)
+                set go false
+                return ""
+            }
+        }
+    }
+    return (str_concat out "]")
+}
+
+shadow parse_array {
+    let p: List<int> = (list_int_new)
+    (list_int_push p 0)
+    let e: List<int> = (list_int_new)
+    (list_int_push e 0)
+    assert (== (parse_array "[]" p e) "arr[]")
+}
+
+fn parse_object(s: string, pos: List<int>, err: List<int>) -> string {
+    (advance pos)
+    # consume '{'
+    (skip_ws s pos)
+    let mut out: string = "obj{"
+    if (== (peek s pos) 125) {
+        (advance pos)
+        return (str_concat out "}")
+    }
+    let mut go: bool = true
+    let mut first: bool = true
+    while go {
+        (skip_ws s pos)
+        # key must be a string
+        if (!= (peek s pos) 34) {
+            (cell_set err 1)
+            set go false
+            return ""
+        }
+        (advance pos)
+        let key: string = (parse_string_body s pos err)
+        if (== (cell_get err) 1) {
+            set go false
+            return ""
+        }
+        (skip_ws s pos)
+        if (!= (peek s pos) 58) {
+            (cell_set err 1)
+            set go false
+            return ""
+        }
+        (advance pos)
+        let val: string = (parse_value s pos err)
+        if (== (cell_get err) 1) {
+            set go false
+            return ""
+        }
+        let pair: string = (str_concat key (str_concat "=" val))
+        if first {
+            set out (str_concat out pair)
+            set first false
+        } else {
+            set out (str_concat out (str_concat "|" pair))
+        }
+        (skip_ws s pos)
+        let c: int = (peek s pos)
+        if (== c 44) {
+            (advance pos)
+        } else {
+            if (== c 125) {
+                (advance pos)
+                set go false
+            } else {
+                (cell_set err 1)
+                set go false
+                return ""
+            }
+        }
+    }
+    return (str_concat out "}")
+}
+
+shadow parse_object {
+    let p: List<int> = (list_int_new)
+    (list_int_push p 0)
+    let e: List<int> = (list_int_new)
+    (list_int_push e 0)
+    assert (== (parse_object "{}" p e) "obj{}")
+}
+
+# ---- Top-level parse --------------------------------------------------------
+# Returns "ERR" on any error, otherwise the canonical encoding.
+
+fn json_parse(s: string) -> string {
+    let pos: List<int> = (list_int_new)
+    (list_int_push pos 0)
+    let err: List<int> = (list_int_new)
+    (list_int_push err 0)
+
+    (skip_ws s pos)
+    # empty input -> error
+    if (== (peek s pos) -1) {
+        return "ERR"
+    }
+    let v: string = (parse_value s pos err)
+    if (== (cell_get err) 1) {
+        return "ERR"
+    }
+    (skip_ws s pos)
+    # trailing garbage -> error
+    if (!= (peek s pos) -1) {
+        return "ERR"
+    }
+    return v
+}
+
+shadow json_parse {
+    assert (== (json_parse "42") "int:42")
+    assert (== (json_parse "") "ERR")
+    assert (== (json_parse "01") "ERR")
+}
+
+# ---- Test harness: all 22 spec cases ---------------------------------------
+
+fn check(num: int, input: string, expected: string) -> bool {
+    let got: string = (json_parse input)
+    if (str_equals got expected) {
+        return true
+    }
+    (println (str_concat "FAIL case " (str_concat (int_to_string num) (str_concat ": got [" (str_concat got (str_concat "] expected [" (str_concat expected "]")))))))
+    return false
+}
+
+shadow check {
+    assert (== (check 1 "42" "int:42") true)
+}
+
+fn main() -> int {
+    let mut pass: int = 0
+
+    # --- success cases (1-13) ---
+    if (check 1 "null" "null") { set pass (+ pass 1) }
+    if (check 2 "true" "true") { set pass (+ pass 1) }
+    if (check 3 "false" "false") { set pass (+ pass 1) }
+    if (check 4 "42" "int:42") { set pass (+ pass 1) }
+    if (check 5 "3.14" "float:3.14") { set pass (+ pass 1) }
+    if (check 6 "\"hello\"" "str:hello") { set pass (+ pass 1) }
+    if (check 7 "\"a\\\"b\"" "str:a\"b") { set pass (+ pass 1) }
+    if (check 8 "[]" "arr[]") { set pass (+ pass 1) }
+    if (check 9 "{}" "obj{}") { set pass (+ pass 1) }
+    if (check 10 "[1, 2, 3]" "arr[int:1|int:2|int:3]") { set pass (+ pass 1) }
+    if (check 11 "{\"a\": 1, \"b\": true}" "obj{a=int:1|b=true}") { set pass (+ pass 1) }
+    if (check 12 "{\"a\": [1, {\"b\": null}]}" "obj{a=arr[int:1|obj{b=null}]}") { set pass (+ pass 1) }
+    if (check 13 " 42 " "int:42") { set pass (+ pass 1) }
+
+    # --- error cases (14-22): expect "ERR" ---
+    if (check 14 "" "ERR") { set pass (+ pass 1) }
+    if (check 15 "[1, 2, ]" "ERR") { set pass (+ pass 1) }
+    if (check 16 "[1, 2" "ERR") { set pass (+ pass 1) }
+    if (check 17 "{\"a\": 1" "ERR") { set pass (+ pass 1) }
+    if (check 18 "01" "ERR") { set pass (+ pass 1) }
+    if (check 19 "1." "ERR") { set pass (+ pass 1) }
+    if (check 20 ".5" "ERR") { set pass (+ pass 1) }
+    if (check 21 "foo" "ERR") { set pass (+ pass 1) }
+    if (check 22 "\"abc" "ERR") { set pass (+ pass 1) }
+
+    (println (str_concat "PASS " (str_concat (int_to_string pass) "/22")))
+    return 0
+}
+
+shadow main {
+    assert (== (main) 0)
+}

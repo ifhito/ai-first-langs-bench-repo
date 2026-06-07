@@ -1,0 +1,10 @@
+## condition: NanoLang/B
+## command: indir problem2-bank-account/results/NanoLang/B nanolang attempt_2.nano
+## date(host): 2026-06-07T14:01:21Z
+----- stdout+stderr -----
+Warning at line 118, column 5: Unused variable 'e'
+Warning at line 134, column 5: Unused variable 'v'
+Warning at line 134, column 5: Unused variable 'e'
+PASS 14/14
+----- exit code -----
+0

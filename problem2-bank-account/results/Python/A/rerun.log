@@ -1,0 +1,22 @@
+## condition: Python/A
+## command: bash -lc cd '/Users/hotake/Documents/ai-lang-bench-repo/problem2-bank-account/results/Python/A' && python3 run_tests.py; echo '(exit-code shown below is python3 exit)'
+## date(host): 2026-06-07T14:01:16Z
+----- stdout+stderr -----
+PASS  1: fresh balance == 0
+PASS  2: deposit(100) == 100
+PASS  3: deposit(100)+deposit(50) == 150
+PASS  4: deposit(100)+withdraw(30) == 70
+PASS  5: deposit(100)+withdraw(100) == 0
+PASS  6: deposit(50)+deposit(50)+withdraw(80) == 20
+PASS  7: fresh withdraw(10) rejected, balance 0
+PASS  8: deposit(100)+withdraw(101) rejected, balance 100
+PASS  9: deposit(-50) rejected, balance 0
+PASS  10: withdraw(-50) rejected, balance 0
+PASS  11: deposit(0) rejected, balance 0
+PASS  12: withdraw(0) rejected, balance 0
+PASS  13: balance never negative across run
+PASS  14: error cases leave balance unchanged
+PASS 14/14
+(exit-code shown below is python3 exit)
+----- exit code -----
+0

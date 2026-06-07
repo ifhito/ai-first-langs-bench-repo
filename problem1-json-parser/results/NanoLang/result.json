@@ -1,0 +1,150 @@
+{
+  "language": "NanoLang",
+  "conditions": {
+    "A": {
+      "status": "DONE",
+      "pass_at_1": false,
+      "fix_rounds": 4,
+      "final_pass_count": "22/22",
+      "loc": 906,
+      "tokens": 4004,
+      "self_recovered": true,
+      "error_quality": "structured - the compiler's Elm-style errors (named error codes, source carets, and concrete hints like \"If you meant to call a function, use (function_name args)\" and \"requires a dynamic array (use [] to create one)\") were the single most useful signal and effectively taught me the real grammar from scratch.",
+      "notes": "Pattern A prior knowledge of NanoLang was almost entirely wrong; I reverse-engineered the actual S-expression-call / infix-operator grammar and stdlib purely from raw compiler errors (permitted as toolchain output). Final solution parses all 22 cases by hand (no stdlib JSON), 22/22, with deep value/length/key verification where the interpreter permits it.",
+      "attempts": [
+        {
+          "attempt": 1,
+          "pass_count": 0,
+          "failed_cases": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22
+          ]
+        },
+        {
+          "attempt": 2,
+          "pass_count": 0,
+          "failed_cases": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22
+          ]
+        },
+        {
+          "attempt": 3,
+          "pass_count": 0,
+          "failed_cases": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22
+          ]
+        },
+        {
+          "attempt": 4,
+          "pass_count": 20,
+          "failed_cases": [
+            11,
+            12
+          ]
+        },
+        {
+          "attempt": 5,
+          "pass_count": 22,
+          "failed_cases": []
+        }
+      ],
+      "raw_error_excerpts": [
+        "Error: Unknown character '&' at line 72 ... Unexpected token in expression: BAR (type=79)  -> || and && are not boolean operators; use 'or'/'and'",
+        "Cannot redefine built-in function 'is_digit'  Built-in functions cannot be shadowed  Choose a different function name",
+        "I cannot find a function named `go` ... Unused variable 'go' ... while (go) {  -> a parenthesized bare variable is parsed as a zero-arg call; conditions that are a single variable must NOT be parenthesized",
+        "let r: int = add(40, 2)  Hint: If you meant to call a function, use (function_name args). If you meant to assign, use set.  -> calls are S-expressions (func args)",
+        "Error: Built-in function 'array_get' not implemented in interpreter ; Cannot access field on non-struct value (iterating array<struct> yields non-structs) -> drove harness redesign"
+      ],
+      "toolchain_notes": "Binary is `nanolang` (tree-walking interpreter; no `nanoc`/C-compile available in image). Wrote sources to host /Users/hotake/Documents/ai-lang-bench-repo/problem1-json-parser/results/NanoLang/A (bind-mounted at /bench). Build+run+test in one step: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem1-json-parser/results/NanoLang/A ai-lang-bench bash -lc 'nanolang solution.nano'. The program self-reports PASS/FAIL per case and a final TOTAL line. Final run prints PASS 1..22 and TOTAL 22. Final solution at /Users/hotake/Documents/ai-lang-bench-repo/problem1-json-parser/results/NanoLang/A/solution.nano; attempts kept as attempt_1.nano .. attempt_5.nano.",
+      "pass_basis": "value",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "nanolang solution.nano", "result": "PASS 22 / TOTAL 22"}
+    },
+    "B": {
+      "status": "DONE",
+      "pass_at_1": true,
+      "fix_rounds": 0,
+      "final_pass_count": "22/22",
+      "loc": 522,
+      "tokens": 2074,
+      "self_recovered": false,
+      "error_quality": "poor: no toolchain errors occurred since the implementation passed 22/22 on the first run, so error quality could not be assessed.",
+      "notes": "Hand-written recursive-descent JSON parser that emits a canonical unambiguous string encoding per value; cursor and error flag are threaded through single-cell List<int> references because struct-field assignment (`set s.field`) is unsupported. Errors are signalled by an error cell (returns \"ERR\") with no crashes; all 22 spec cases pass and every function has a mandatory shadow test block.",
+      "attempts": [
+        {
+          "attempt": 1,
+          "pass_count": 22,
+          "failed_cases": []
+        }
+      ],
+      "raw_error_excerpts": [],
+      "toolchain_notes": "Guide acquisition (Pattern B): docker run --rm ai-lang-bench bash -lc 'cat /opt/nanolang/README.md' and 'cat /opt/nanolang/docs/QUICK_REFERENCE.md', 'cat /opt/nanolang/docs/STDLIB.md', plus union/list examples under /opt/nanolang/examples and /opt/nanolang/tests. Binary `nanolang` is a symlink to /opt/nanolang/bin/nano (a tree-walking interpreter; `nano`/`nanoc` are not on PATH). Build/run command: docker run --rm -v /Users/hotake/Documents/ai-lang-bench-repo:/bench -w /bench/problem1-json-parser/results/NanoLang/B ai-lang-bench nanolang json.nano. Output: 'PASS 22/22', exit 0; all shadow tests compiled and passed. Discovered via smoke tests that `set s.field` (struct mutation) is unsupported but List<int> is pass-by-reference with list_int_get/list_int_set, used as mutable cursor cells.",
+      "pass_basis": "normalized",
+      "self_recovered_normalized": true,
+      "reverify": {"command": "nanolang json.nano", "result": "PASS 22/22"}
+    }
+  },
+  "status": "DONE"
+}
