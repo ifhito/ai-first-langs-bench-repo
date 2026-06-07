@@ -1,0 +1,11 @@
+-- attempt_4: try VBAR after type (in follow-set): @String | s
+public data Json { JNull, JBool(Bool), JStr(String) }
+public data Result { Ok(Json), Err(String) }
+
+public fn parse(@String | s)
+  requires()
+  ensures()
+  effects()
+{
+  return Err("nyi");
+}

@@ -1,0 +1,11 @@
+-- attempt_3: try EQUAL (in the type follow-set) to bind a name: @String = s
+public data Json { JNull, JBool(Bool), JStr(String) }
+public data Result { Ok(Json), Err(String) }
+
+public fn parse(@String = s)
+  requires()
+  ensures()
+  effects()
+{
+  return Err("nyi");
+}

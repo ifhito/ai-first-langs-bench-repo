@@ -1,0 +1,48 @@
+-- attempt_6: furthest-progressed form discovered purely from raw `vera` diagnostics.
+--
+-- Discovered under Pattern A (spec + raw compiler errors only):
+--   * comments use `--`
+--   * top-level decls need `public`/`private` + data/fn/forall
+--   * ADT:  public data Name { Variant, Variant(Type, ...) }   (no trailing comma)
+--   * fn signature:  public fn name(@ParamType -> @ReturnType)
+--                      requires(<expr>) ensures(<expr>) effects(pure) { <expr> }
+--   * body is a trailing expression (no `return` keyword); `5 + 5` etc. work
+--   * call it with:  vera run file.vera --fn name -- <args>
+--
+-- BLOCKER (unrecoverable under Pattern A): the parser refuses to name the token
+-- that binds a *parameter name*. After `@Type` it only ever reports
+-- "Expected one of: COMMA, __ANON_0", and every concrete candidate (identifiers,
+-- all punctuation, keywords, brackets) is rejected. With no way to *name* the
+-- input parameter, the function body cannot reference the JSON input string, so a
+-- real recursive-descent parser cannot be expressed. The guide/SKILL.md that would
+-- reveal this token is forbidden in Pattern A.
+--
+-- Hence this compiles and runs, but can only return a constant stub.
+
+public data Json {
+  JNull,
+  JBool(Bool),
+  JInt(Int),
+  JFloat(Double),
+  JStr(String),
+  JArr(JList),
+  JObj(JList)
+}
+
+public data JList {
+  Nil,
+  Cons(Json, JList)
+}
+
+public data Result {
+  Ok(Json),
+  Err(String)
+}
+
+public fn parse(@String -> @Result)
+  requires(true)
+  ensures(true)
+  effects(pure)
+{
+  Err("parameter-binding syntax (__ANON_0) not recoverable under Pattern A")
+}

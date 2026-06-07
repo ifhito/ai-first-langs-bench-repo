@@ -1,0 +1,12 @@
+-- attempt_2: drive off "Expected COMMA, __ANON_0" -- try @{ ... } slot block as the param.
+public data Json { JNull, JBool(Bool), JStr(String), JArr(JList), JObj(JList) }
+public data JList { Nil, Cons(Json, JList) }
+public data Result { Ok(Json), Err(String) }
+
+public fn parse(@{@String})
+  requires()
+  ensures()
+  effects()
+{
+  return Err("nyi");
+}

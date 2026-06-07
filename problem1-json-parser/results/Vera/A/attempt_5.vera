@@ -1,0 +1,11 @@
+-- attempt_5: try a name-only slot '@s' (let type be inferred / contract-defined)
+public data Json { JNull, JBool(Bool), JStr(String) }
+public data Result { Ok(Json), Err(String) }
+
+public fn parse(@s)
+  requires()
+  ensures()
+  effects()
+{
+  return Err("nyi");
+}

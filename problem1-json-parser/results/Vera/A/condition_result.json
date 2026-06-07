@@ -1,0 +1,63 @@
+{
+  "language": "Vera",
+  "condition": "A",
+  "status": "PARTIAL",
+  "pass_at_1": false,
+  "fix_rounds": 5,
+  "final_pass_count": "0/22",
+  "loc": 48,
+  "tokens": 235,
+  "self_recovered": false,
+  "error_quality": "structured-but-opaque",
+  "pass_basis": null,
+  "notes": "Vera is a contract-verification language (requires/ensures/effects + Z3) with a highly unconventional grammar. Under Pattern A (spec + raw compiler errors only, no guide/SKILL.md/examples) I reverse-engineered a large amount from diagnostics: '--' line comments; top-level decls need public/private + data|fn|forall; ADTs are 'public data Name { Variant, Variant(Type,...) }' (positional payloads, no trailing comma); function signature is 'public fn name(@ParamType -> @ReturnType) requires(<expr>) ensures(<expr>) effects(pure) { <expr> }'; body is a trailing expression (no 'return' keyword); literal arithmetic like '5 + 5' evaluates; functions run via 'vera run f.vera --fn name -- <args>'. attempt_6 compiles AND runs. HARD WALL: the parser will not reveal the token that BINDS A PARAMETER NAME. After '@Type' the diagnostic only ever says \"Expected one of: COMMA, __ANON_0\", and every concrete candidate I tried (lowercase/uppercase identifiers, all ASCII punctuation, multi-char operators, keywords like self/mut/let/in/as, all bracket kinds) is rejected -- the needed token is masked as the anonymous lexer symbol '__ANON_0'. With no way to name the input parameter, the body cannot reference the JSON input string, so a real recursive-descent parser is impossible. Operators are similarly masked as '__ANON_9'. The guide that would reveal these tokens is forbidden in Pattern A. Therefore attempt_6 can only return a constant Err stub: it fails all 13 valid cases (wrong value) and 'passes' the 9 error cases only degenerately (constant Err, not real parsing), so functional pass_count is 0/22 and pass_basis is null. Full 5-fix budget used (attempt_1..attempt_6).",
+  "attempts": [
+    {
+      "attempt": 1,
+      "pass_count": 0,
+      "failed_cases": "all (parse error)",
+      "note": "First generation. ADT + 'public fn parse(@String) requires() ensures() effects() {..}'. Parse error E005 at ')': 'Expected one of: COMMA, __ANON_0' -- empty/closed param list rejected; param-binding token unknown. ('//' comments also rejected on prior draft; switched to '--'.)"
+    },
+    {
+      "attempt": 2,
+      "pass_count": 0,
+      "failed_cases": "all (parse error)",
+      "note": "Hypothesis: param is a slot block '@{ @String }'. E005 at '}': 'Expected one of: COMMA, EQUAL, LESSTHAN, MORETHAN, RPAR, SEMICOLON, VBAR, __ANON_0' -- still cannot close after a type."
+    },
+    {
+      "attempt": 3,
+      "pass_count": 0,
+      "failed_cases": "all (parse error)",
+      "note": "Hypothesis: bind name via EQUAL '@String = s'. E005 at '=': 'Expected one of: COMMA, __ANON_0'."
+    },
+    {
+      "attempt": 4,
+      "pass_count": 0,
+      "failed_cases": "all (parse error)",
+      "note": "Hypothesis: bind name via VBAR '@String | s'. E005 at '|': 'Expected one of: COMMA, __ANON_0'."
+    },
+    {
+      "attempt": 5,
+      "pass_count": 0,
+      "failed_cases": "all (parse error)",
+      "note": "Hypothesis: name-only slot '@s'. E005 at 's': 'Expected one of: FN, LBRACE, UPPER_IDENT' -- '@' must be followed by a TYPE, not a name."
+    },
+    {
+      "attempt": 6,
+      "pass_count": 0,
+      "failed_cases": "13 valid cases fail (constant Err stub returns wrong value); 9 error cases pass only degenerately, not counted as real passes -> functional 0/22",
+      "note": "Best-effort: 'public fn parse(@String -> @Result) requires(true) ensures(true) effects(pure) { Err(...) }'. COMPILES (vera check OK) and RUNS (vera run --fn parse -- \"null\" returns a value). But with no parameter name the body cannot read the input, so it can only return a constant stub. This is the furthest reachable under Pattern A."
+    }
+  ],
+  "raw_error_excerpts": [
+    "[E005] Unexpected \")\" at this position. Expected one of: AT, __ANON_0   (empty param list '()' rejected)",
+    "[E005] Unexpected \")\" at this position. Expected one of: COMMA, __ANON_0   (cannot close param list after '@String'; binding token masked as __ANON_0)",
+    "[E005] Unexpected \"s\" at this position. Expected one of: FN, LBRACE, UPPER_IDENT   ('@' must be followed by a TYPE)",
+    "[E001] Function is missing its contract block. Every function in Vera must declare requires(), ensures(), and effects() clauses between the signature and the body.",
+    "[E005] effects(...) Unexpected \"true\"; Expected one of: LESSTHAN, PURE   (effects takes 'pure' or '<...>', not a bool)",
+    "[E005] body: Unexpected \"Err\" after 'return'; Expected one of: DOT, LPAR, __ANON_9   (no 'return' keyword; body is a trailing expression; operators masked as __ANON_9)",
+    "Missing visibility on 'Color'. Add 'public' or 'private' before 'data'.   (clear, actionable diagnostic)"
+  ],
+  "toolchain_notes": "vera CLI present in Docker image ai-lang-bench (/opt/venv/bin/vera). Commands used: 'vera --help', 'vera check <f>', 'vera check --json <f>', 'vera run <f> --fn <name> -- <args>'. NO guide / SKILL.md / /opt/vera examples / sample programs / web info were consulted -- knowledge came ONLY from the spec, the CLI --help, and raw compiler diagnostics on my own code (Pattern A STRICT). Probe files were temporary and deleted; only attempt_1..attempt_6 remain.",
+  "self_recovered_normalized": false
+}

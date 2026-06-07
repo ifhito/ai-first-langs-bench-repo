@@ -1,3 +1,0 @@
-fn inc(@Int @Int @Int) -> Int {
-    @Int.0
-}
