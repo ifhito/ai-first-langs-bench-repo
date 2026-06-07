@@ -1,0 +1,19 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# 言語処理系のビルド生成物
+*.o
+*.out
+*.wasm
+node_modules/
+__pycache__/
+*.pyc
+target/
+
+# ベンチマーク実行物（必要なら残す。デフォルトでは生成コードはコミット可、ゴミだけ除外）
+*.log
+tmp/
